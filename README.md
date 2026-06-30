@@ -12,8 +12,6 @@ The supplied gold-standard reference document is the OECD economic outlook for 2
 
 This project is built with LangChain + Together AI (Llama 3.1 70B). Originally prototyped in a notebook, refactored into a tested, containerised, deployable service.
 
-![CI](https://github.com/alexkzw/llm-qa-pipeline/actions/workflows/ci.yml/badge.svg)
-
 ---
 
 ## What it does
