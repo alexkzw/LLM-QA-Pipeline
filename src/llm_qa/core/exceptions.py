@@ -1,8 +1,7 @@
 """Typed exceptions for the QA pipeline.
 
-Using specific exception types (instead of the notebook's bare ``Exception``)
-lets callers and the API layer handle each failure mode appropriately and
-return meaningful error responses.
+Using specific exception types, lets callers and the API layer handle 
+each failure mode appropriately and return meaningful error responses.
 """
 from __future__ import annotations
 
