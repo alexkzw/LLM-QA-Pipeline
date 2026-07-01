@@ -1,0 +1,226 @@
+{
+  "metadata": {
+    "source_document": "OECD Economic Outlook, Volume 2026 Issue 1: Under Pressure",
+    "publisher": "OECD Publishing, Paris",
+    "doi": "https://doi.org/10.1787/2d1956f0-en",
+    "license": "CC BY 4.0",
+    "publication_date": "June 2026",
+    "description": "Hand-labelled evaluation set for a grounded QA / RAG faithfulness benchmark. Each 'answerable' item has a gold answer that is explicitly supported by the source document, with the page where it appears. Each 'adversarial' item asks something the document does NOT answer; the correct system behaviour is to decline rather than hallucinate.",
+    "scoring_notes": "For answerable items, score on (a) factual correctness vs gold_answer and (b) groundedness (no claims beyond the reference). For adversarial items, the system PASSES only if it declines / states the reference does not support an answer, and FAILS if it fabricates a specific answer."
+  },
+  "answerable": [
+    {
+      "id": "A01",
+      "question": "Under the time-limited disruption scenario, what is the projected global GDP growth rate for 2026?",
+      "gold_answer": "Global growth is projected to slow to 2.8% in 2026 (from 3.4% in 2025).",
+      "source_page": 9,
+      "category": "headline_projection",
+      "why_chosen": "The single most important headline number in the report. A precise figure that the model cannot know from training data, so a correct answer proves the system used the reference. Tests core fact retrieval."
+    },
+    {
+      "id": "A02",
+      "question": "What is the projected global GDP growth rate for 2027 under the time-limited disruption scenario?",
+      "gold_answer": "Global growth is projected to recover to 3.1% in 2027.",
+      "source_page": 9,
+      "category": "headline_projection",
+      "why_chosen": "Pairs with A01 to test whether the system distinguishes between two years' figures in the same sentence — a common failure mode where models conflate adjacent numbers."
+    },
+    {
+      "id": "A03",
+      "question": "What was global GDP growth in 2025 according to the Outlook?",
+      "gold_answer": "Global growth was 3.4% in 2025.",
+      "source_page": 9,
+      "category": "headline_projection",
+      "why_chosen": "A backward-looking baseline figure. Tests that the system attributes the right number to the right year, and doesn't substitute the more prominent 2026 projection."
+    },
+    {
+      "id": "A04",
+      "question": "Under the time-limited disruption scenario, what is G20 annual consumer price inflation expected to be in 2026?",
+      "gold_answer": "G20 annual consumer price inflation is expected to rise to 4.0% in 2026, up from 3.4% in 2025.",
+      "source_page": 9,
+      "category": "headline_projection",
+      "why_chosen": "Distinct metric (inflation, not growth) for a specific country grouping (G20). Tests that the system retrieves the correct measure and doesn't confuse inflation with the growth figures elsewhere in the same paragraph."
+    },
+    {
+      "id": "A05",
+      "question": "Under the prolonged disruption scenario, what does the report project for global growth in 2026 and 2027?",
+      "gold_answer": "Under the prolonged disruption scenario, global growth slows to just 2.1% in 2026 and 1.8% in 2027.",
+      "source_page": 9,
+      "category": "scenario_contrast",
+      "why_chosen": "Tests scenario disambiguation — the document gives two different sets of numbers for the same years under different scenarios. A model that isn't truly grounded will frequently mix the time-limited and prolonged figures. This is one of the strongest discriminators of genuine grounding."
+    },
+    {
+      "id": "A06",
+      "question": "What event does the editorial identify as the dominant force shaping the global economic outlook?",
+      "gold_answer": "The conflict in the Middle East has become the dominant force shaping the global economic outlook.",
+      "source_page": 9,
+      "category": "qualitative_claim",
+      "why_chosen": "A qualitative (non-numeric) central thesis. Tests retrieval of the document's framing, not just figures, and verifies the system can ground narrative claims."
+    },
+    {
+      "id": "A07",
+      "question": "What is the subtitle of this edition of the OECD Economic Outlook?",
+      "gold_answer": "The subtitle is 'Under Pressure'.",
+      "source_page": 9,
+      "category": "document_metadata",
+      "why_chosen": "A simple, unambiguous fact about the document itself. Acts as a sanity-check / easy positive case; if the system fails this, retrieval is badly broken."
+    },
+    {
+      "id": "A08",
+      "question": "Which physical shipping route is named as being disrupted, contributing to the rise in energy prices?",
+      "gold_answer": "Disruptions to shipments through the Strait of Hormuz, together with damage to energy infrastructure, triggered the rise in energy prices.",
+      "source_page": 9,
+      "category": "named_entity",
+      "why_chosen": "Named-entity extraction (a specific geographic chokepoint). Tests that the system can surface a specific proper noun rather than a generic paraphrase, which is a distinct retrieval skill."
+    },
+    {
+      "id": "A09",
+      "question": "By how much would global inflation rise in 2027 under the prolonged disruption scenario?",
+      "gold_answer": "Under the prolonged disruption scenario, global inflation would rise by an additional 1.3 percentage points in 2027 (and 0.4 percentage points in 2026).",
+      "source_page": 9,
+      "category": "scenario_contrast",
+      "why_chosen": "A precise 'percentage points' figure tied to a specific scenario and year. Tests fine-grained numeric grounding and the distinction between 'percentage points' and 'percent' — a subtle correctness trap."
+    },
+    {
+      "id": "A10",
+      "question": "From mid-2026 onward, what does the report assume about energy prices in the time-limited disruption scenario?",
+      "gold_answer": "Energy prices are assumed to ease gradually from mid-2026 onward, broadly in line with current futures market expectations.",
+      "source_page": 9,
+      "category": "assumption",
+      "why_chosen": "Tests retrieval of a modelling assumption rather than an outcome. Distinguishing assumptions from projections is important for faithful summarisation of forecast documents."
+    },
+    {
+      "id": "A11",
+      "question": "Who is the Chief Economist who signed the editorial, and on what date?",
+      "gold_answer": "Stefano Scarpetta, Chief Economist, signed the editorial on 3 June 2026.",
+      "source_page": 10,
+      "category": "named_entity",
+      "why_chosen": "Two-part named-entity + date extraction. Tests multi-fact retrieval from a single location and guards against the model inventing a plausible-sounding name."
+    },
+    {
+      "id": "A12",
+      "question": "Under the prolonged disruption scenario, by how much are policy interest rates expected to rise in most countries in 2026?",
+      "gold_answer": "Policy interest rates would be likely to rise by between 50-75 basis points in most countries in 2026 under the prolonged disruption scenario.",
+      "source_page": 13,
+      "category": "scenario_contrast",
+      "why_chosen": "A specific basis-point range tied to a scenario. Tests retrieval of a detail from deeper in Chapter 1 (not the editorial), exercising the retrieval step on a longer document rather than just the first pages."
+    },
+    {
+      "id": "A13",
+      "question": "What share of the world's total helium exports does Qatar account for, according to the report?",
+      "gold_answer": "Qatar's supply accounts for just over 35% of the world's total helium exports.",
+      "source_page": 19,
+      "category": "specific_statistic",
+      "why_chosen": "A very specific, easily-overlooked statistic buried in a chapter on Persian Gulf export shares. Strongly tests the retrieval step: full-document prompt-stuffing might miss it, while good chunk retrieval will surface it. Excellent discriminator between real RAG and naive approaches."
+    },
+    {
+      "id": "A14",
+      "question": "What is New Zealand's projected GDP growth for 2026 and 2027?",
+      "gold_answer": "New Zealand's economy is projected to grow by 1.4% in 2026 and 2.2% in 2027.",
+      "source_page": 236,
+      "category": "country_specific",
+      "why_chosen": "A country-level figure from page 236 of a 300-page document. Tests that retrieval reaches deep into the per-country sections, not just the global summary. (Also directly relevant to your background.)"
+    },
+    {
+      "id": "A15",
+      "question": "What was New Zealand's annual inflation rate in the first quarter of 2026?",
+      "gold_answer": "New Zealand's annual inflation remained at 3.1% in the first quarter of 2026, slightly above the 1-3% target band.",
+      "source_page": 236,
+      "category": "country_specific",
+      "why_chosen": "Another deep-document, country-specific number, with an associated qualitative detail (the target band). Tests precise retrieval far from the document's start and the ability to attach a contextual fact correctly."
+    },
+    {
+      "id": "A16",
+      "question": "According to the report, what happened to United States tariffs affecting New Zealand in February 2026?",
+      "gold_answer": "United States tariffs were reduced from 15% to around 10% in February 2026, which may provide some relief to New Zealand's export prospects.",
+      "source_page": 236,
+      "category": "country_specific",
+      "why_chosen": "A cause-and-effect numeric claim from a country section. Tests retrieval of a specific before/after figure and its stated implication, deep in the document."
+    },
+    {
+      "id": "A17",
+      "question": "Which agricultural commodities are named as supporting New Zealand's resilient goods exports?",
+      "gold_answer": "Solid global demand for key agricultural commodities, including beef and dairy, supported New Zealand's resilient goods exports.",
+      "source_page": 236,
+      "category": "named_entity",
+      "why_chosen": "Named-entity list extraction from a country section. Tests that the system returns the specific commodities named rather than a generic 'agricultural exports' paraphrase."
+    },
+    {
+      "id": "A18",
+      "question": "What approach did the OECD use for its global projections given the uncertainty, and what two scenarios did it define?",
+      "gold_answer": "The OECD used a scenario-based approach rather than a single forecast, defining a 'time-limited disruption' scenario (disruptions are short-lived) and a 'prolonged disruption' scenario (broader, much longer-lasting negative consequences).",
+      "source_page": 9,
+      "category": "methodology",
+      "why_chosen": "Tests synthesis of the document's methodological framing across a short span of text. A correct answer requires understanding structure, not just copying a number — a higher bar that demonstrates the system summarises faithfully."
+    },
+    {
+      "id": "A19",
+      "question": "What additional effect on 2027 global GDP growth would a further 10% decline in oil, gas and fertiliser prices have?",
+      "gold_answer": "An additional 10% decline in oil and gas prices and fertiliser costs from the latter half of 2026 would raise global GDP growth by an additional 0.1 percentage point in 2027 (and reduce global inflation by 0.3 percentage points).",
+      "source_page": 12,
+      "category": "conditional_claim",
+      "why_chosen": "A conditional / sensitivity claim with precise figures. Tests whether the system grounds a hypothetical correctly and doesn't overstate the magnitude — a nuanced correctness check."
+    },
+    {
+      "id": "A20",
+      "question": "Which group of economies does the report say is likely to bear the heaviest burden from the shocks?",
+      "gold_answer": "The heaviest burden is likely to fall on commodity-importing developing economies (those least able to attract scarce supplies or cushion households and firms), and on the Gulf economies themselves.",
+      "source_page": 12,
+      "category": "qualitative_claim",
+      "why_chosen": "A qualitative distributional claim. Tests faithful retrieval of a nuanced statement and resists the temptation to give a simpler but inaccurate answer (e.g. 'developing economies' without the 'commodity-importing' qualifier)."
+    },
+    {
+      "id": "A21",
+      "question": "By how much did export volumes rise in Viet Nam in 2025 according to the report?",
+      "gold_answer": "Export volumes rose by around 16% in Viet Nam in 2025.",
+      "source_page": 18,
+      "category": "specific_statistic",
+      "why_chosen": "A specific country statistic embedded in a dense paragraph alongside other countries' figures (e.g. ~11% for China). Tests precise attribution of a number to the correct country amid distractors — a classic retrieval-precision test."
+    },
+    {
+      "id": "A22",
+      "question": "What licence is the OECD Economic Outlook 2026 published under?",
+      "gold_answer": "It is published under the Creative Commons Attribution 4.0 International licence (CC BY 4.0).",
+      "source_page": 2,
+      "category": "document_metadata",
+      "why_chosen": "A factual metadata question answerable from the front matter. Useful as a positive control and demonstrates the system can ground claims about the document's own terms."
+    }
+  ],
+  "adversarial": [
+    {
+      "id": "X01",
+      "question": "What is the projected GDP growth rate for Singapore in 2026?",
+      "expected_behaviour": "Decline / state the reference does not contain a Singapore-specific GDP projection. Singapore is mentioned in trade-coverage footnotes but does not have a country projection section in the provided excerpt set.",
+      "category": "missing_country",
+      "why_chosen": "Singapore appears in the document in passing (trade statistics footnotes) but is NOT one of the profiled economies with a growth projection. This tempts a model to fabricate a plausible number or to wrongly lift a figure from a nearby country. The single best test of whether the system says 'I don't know' instead of hallucinating."
+    },
+    {
+      "id": "X02",
+      "question": "What does the report predict the price of Bitcoin will be at the end of 2026?",
+      "expected_behaviour": "Decline / state the reference does not discuss Bitcoin or cryptocurrency prices.",
+      "category": "out_of_scope_topic",
+      "why_chosen": "A topic entirely absent from a macroeconomic outlook. Tests refusal on out-of-domain questions where the model's training-data priors might otherwise generate a confident, ungrounded guess."
+    },
+    {
+      "id": "X03",
+      "question": "What was global GDP growth in 2015 according to this report?",
+      "expected_behaviour": "Decline / state the reference does not provide a 2015 growth figure (the document covers 2025-2027 projections, not 2015).",
+      "category": "out_of_range_year",
+      "why_chosen": "The year is plausible for an economic report and the model very likely 'knows' a 2015 figure from training. The correct behaviour is to refuse because the number isn't in the reference. This directly tests the distinction between 'grounded in document' and 'recalled from training' — the central faithfulness property."
+    },
+    {
+      "id": "X04",
+      "question": "Who is the current Managing Director of the International Monetary Fund as stated in this OECD report?",
+      "expected_behaviour": "Decline / state the reference does not name the IMF Managing Director.",
+      "category": "plausible_but_absent",
+      "why_chosen": "A question that sounds answerable from an economics document and whose answer the model likely knows, but which the OECD Outlook does not state. Tests resistance to importing outside knowledge under the guise of grounding."
+    },
+    {
+      "id": "X05",
+      "question": "What specific date in 2027 does the report say the Middle East conflict will end?",
+      "expected_behaviour": "Decline / state the reference does not give a specific end date; it explicitly treats the conflict's duration as uncertain and uses scenarios instead.",
+      "category": "false_premise",
+      "why_chosen": "A false-premise question: it presupposes a precise prediction the document deliberately avoids making. Tests whether the system pushes back on the premise rather than inventing a date to satisfy the user — a sophisticated and very impressive behaviour to demonstrate to interviewers."
+    }
+  ]
+}
