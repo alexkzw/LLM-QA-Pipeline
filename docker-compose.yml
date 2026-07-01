@@ -1,0 +1,11 @@
+services:
+  api:
+    build: .
+    ports:
+      - "8000:8000"
+    environment:
+      # Pulled from your shell / .env; never bake secrets into the image.
+      - LLMQA_TOGETHER_API_KEY=${LLMQA_TOGETHER_API_KEY}
+      - LLMQA_LOG_LEVEL=INFO
+      - LLMQA_LOG_JSON=false
+    restart: unless-stopped
