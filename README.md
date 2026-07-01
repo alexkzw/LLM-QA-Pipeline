@@ -102,7 +102,26 @@ docker-compose.yml             # local one-command run
 
 ## Quickstart
 
-### 1. Install
+### 1. Set up an environment
+
+Use an isolated environment so dependencies don't collide with your system Python. 
+
+Using `venv`:
+
+```bash
+python3.11 -m venv .venv
+source .venv/bin/activate        # Windows: .venv\Scripts\activate
+```
+
+Or using conda:
+```bash
+conda create -n llmqa python=3.11 -y
+conda activate llmqa
+```
+
+> **Intel (x86_64) Mac users:** PyTorch dropped Intel-Mac support after 2.2.2, so install a compatible build before the next step: `pip install "torch==2.2.2"`. Apple Silicon, Linux, and Windows users can skip this.
+
+### 2. Install
 
 ```bash
 pip install -e ".[dev]"
