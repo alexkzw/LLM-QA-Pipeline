@@ -20,8 +20,15 @@ dependencies = [
     "tenacity>=8.2.0",
     "fastapi>=0.110.0",
     "uvicorn[standard]>=0.29.0",
-    "sentence-transformers>=2.7.0",
     "chromadb>=0.5.0",
+    # PyTorch dropped Intel-macOS (x86_64) builds after 2.2.2. On that platform,
+    # pin torch and its ML stack to the last mutually-compatible versions;
+    # everywhere else, float free on the latest.
+    "torch==2.2.2; sys_platform == 'darwin' and platform_machine == 'x86_64'",
+    "numpy<2; sys_platform == 'darwin' and platform_machine == 'x86_64'",
+    "transformers<4.40; sys_platform == 'darwin' and platform_machine == 'x86_64'",
+    "sentence-transformers>=2.7.0,<3.0; sys_platform == 'darwin' and platform_machine == 'x86_64'",
+    "sentence-transformers>=2.7.0; sys_platform != 'darwin' or platform_machine != 'x86_64'",
 ]
 
 [project.optional-dependencies]
