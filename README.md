@@ -25,7 +25,7 @@ Large language models hallucinate. This pipeline mitigates that with retrieval p
 
 The result is an answer with stronger faithfulness guarantees than a single LLM call, plus a transparent record of which sources it used and how it got there.
 
-Two entry points are available: `answer()` (stuff the whole document — fine for short references) and `answer_with_retrieval()` (RAG — required for large documents).
+Two entry points are available: `answer()` (stuff the whole document — fine for short references, via `scripts/run_qa.py`) and `answer_with_retrieval()` (RAG — required for large documents like the 300-page OECD reference, via `scripts/ask_rag.py`).
 
 ## Architecture
 
@@ -85,9 +85,10 @@ src/llm_qa/
 └── factory.py                 # composition root (build_pipeline / build_rag_pipeline)
 
 scripts/
-├── run_qa.py                  # CLI: answer questions against a PDF (full-document)
+├── run_qa.py                  # CLI: answer questions against a PDF (full-document, short refs)
 ├── compare_baseline.py        # CLI: grounded vs ungrounded comparison
 ├── index_document.py          # CLI: chunk + embed + index a PDF for RAG
+├── ask_rag.py                 # CLI: answer questions via RAG (large documents)
 └── run_evaluation.py          # CLI: score the RAG pipeline against the gold set
 
 data/
@@ -143,30 +144,39 @@ The CLI and evaluation harness expect `data/oecd_outlook_2026.pdf`, which isn't 
 
 Once downloaded, `python scripts/download_data.py` will detect the existing file and skip re-fetching (or re-run it later if OECD's access restrictions change).
 
-### 5. Run the CLI
+### 5. Run the CLI (full-document — short references only)
+
+`run_qa.py` stuffs the *entire* reference into a single prompt, capped at
+`LLMQA_MAX_REFERENCE_CHARS` (default 131,072 characters — about 100 pages).
+It's for short references you supply yourself; it is **not** suitable for the
+300-page OECD PDF shipped in `data/` (see step 6 for that).
 
 ```bash
-# Single question
-python scripts/run_qa.py --pdf data/oecd_outlook_2026.pdf --question "What is the projected global GDP growth rate for 2026?"
+# Single question (swap in your own short PDF)
+python scripts/run_qa.py --pdf path/to/short_reference.pdf --question "What is X?"
 
 # Batch of questions from a file, written to JSON
-python scripts/run_qa.py --pdf data/oecd_outlook_2026.pdf --questions-file questions.txt --output results.json
+python scripts/run_qa.py --pdf path/to/short_reference.pdf --questions-file questions.txt --output results.json
 
 # Compare grounded vs ungrounded answers
-python scripts/compare_baseline.py --pdf data/oecd_outlook_2026.pdf --question "Under the prolonged disruption scenario, what is projected global growth for 2026 and 2027?"
+python scripts/compare_baseline.py --pdf path/to/short_reference.pdf --question "..."
 ```
 
-### 6. Run RAG over a large document
+### 6. Run RAG over a large document (the OECD reference)
 
-For large documents (e.g. the 300-page OECD Economic Outlook), use retrieval
-instead of stuffing the whole document into the prompt. Index once, then query:
+For large documents — e.g. the 300-page OECD Economic Outlook shipped in
+`data/` — use retrieval instead of stuffing the whole document into the
+prompt: index once, then ask questions against the index.
 
 ```bash
 # Index the document into the vector store (chunk -> embed -> persist). Once only.
 python scripts/index_document.py --pdf data/oecd_outlook_2026.pdf
 
-# The RAG path is then used via the evaluation harness or the build_rag_pipeline
-# factory in code. Re-index with --force after changing chunk settings.
+# Ask a question via RAG (indexes automatically first if not already indexed)
+python scripts/ask_rag.py --pdf data/oecd_outlook_2026.pdf --question "What is the projected global GDP growth rate for 2026?"
+
+# Batch of questions from a file, written to JSON
+python scripts/ask_rag.py --pdf data/oecd_outlook_2026.pdf --questions-file questions.txt --output results.json
 ```
 
 ### 7. Run the evaluation harness
