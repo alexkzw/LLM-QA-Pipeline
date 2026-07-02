@@ -19,7 +19,7 @@ from llm_qa.chains.prompts import (
     build_initial_prompt,
 )
 from llm_qa.config.settings import Settings
-from llm_qa.core.llm_provider import TogetherAILLM
+from llm_qa.core.llm_provider import CloudflareWorkersAILLM
 from llm_qa.core.logging_config import get_logger
 from llm_qa.retrieval.retriever import Retriever
 
@@ -65,7 +65,7 @@ class QAPipeline:
 
     def __init__(
         self,
-        llm: TogetherAILLM,
+        llm: CloudflareWorkersAILLM,
         settings: Settings,
         retriever: Retriever | None = None,
     ) -> None:
