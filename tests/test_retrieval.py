@@ -13,7 +13,11 @@ from llm_qa.retrieval.vector_store import RetrievedChunk
 
 
 def _settings() -> Settings:
-    return Settings(together_api_key="test", max_refinement_iterations=3)
+    return Settings(
+        cloudflare_api_key="test",
+        cloudflare_account_id="test-account",
+        max_refinement_iterations=3,
+    )
 
 
 # --- Chunking -----------------------------------------------------------

@@ -31,7 +31,11 @@ class FakeLLM:
 
 
 def _settings() -> Settings:
-    return Settings(together_api_key="test-key", max_refinement_iterations=5)
+    return Settings(
+        cloudflare_api_key="test-key",
+        cloudflare_account_id="test-account",
+        max_refinement_iterations=5,
+    )
 
 
 def _patch_runnable(monkeypatch, fake: FakeLLM) -> None:
@@ -96,7 +100,11 @@ def test_pipeline_refines_then_succeeds(monkeypatch) -> None:
 def test_pipeline_stops_at_max_iterations(monkeypatch) -> None:
     # Always returns UNSUPPORTED -> should exhaust the iteration budget.
     fake = FakeLLM(["initial"] + ["Claim: UNSUPPORTED", "refined"] * 10)
-    settings = Settings(together_api_key="k", max_refinement_iterations=3)
+    settings = Settings(
+        cloudflare_api_key="k",
+        cloudflare_account_id="test-account",
+        max_refinement_iterations=3,
+    )
     pipeline = QAPipeline(llm=None, settings=settings)  # type: ignore[arg-type]
     _patch_runnable(monkeypatch, fake)
 
