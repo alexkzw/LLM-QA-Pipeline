@@ -23,9 +23,9 @@ class Settings(BaseSettings):
     )
 
     # --- Secrets (never hard-code; supplied via env) -------------------
-    together_api_key: str = Field(
+    cloudfare_api_key: str = Field(
         ...,
-        description="Together AI API key. Set via LLMQA_TOGETHER_API_KEY.",
+        description="CloudFare API key. Set via LLMQA_CLOUDFARE_API_KEY.",
     )
 
     # --- Model configuration ------------------------------------------
