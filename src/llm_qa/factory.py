@@ -7,7 +7,7 @@ from __future__ import annotations
 
 from llm_qa.chains.pipeline import QAPipeline
 from llm_qa.config.settings import Settings, get_settings
-from llm_qa.core.llm_provider import TogetherAILLM
+from llm_qa.core.llm_provider import CloudflareWorkersAILLM
 from llm_qa.retrieval.embeddings import EmbeddingModel
 from llm_qa.retrieval.retriever import Retriever
 
@@ -15,7 +15,7 @@ from llm_qa.retrieval.retriever import Retriever
 def build_pipeline(settings: Settings | None = None) -> QAPipeline:
     """Construct a full-document QAPipeline from settings (no retrieval)."""
     settings = settings or get_settings()
-    llm = TogetherAILLM(settings=settings)
+    llm = CloudflareWorkersAILLM(settings=settings)
     return QAPipeline(llm=llm, settings=settings)
 
 
@@ -36,6 +36,6 @@ def build_rag_pipeline(
 ) -> QAPipeline:
     """Construct a retrieval-augmented QAPipeline."""
     settings = settings or get_settings()
-    llm = TogetherAILLM(settings=settings)
+    llm = CloudflareWorkersAILLM(settings=settings)
     retriever = retriever or build_retriever(settings)
     return QAPipeline(llm=llm, settings=settings, retriever=retriever)
