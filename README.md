@@ -119,8 +119,6 @@ conda create -n llmqa python=3.11 -y
 conda activate llmqa
 ```
 
-> **Intel (x86_64) Mac users:** PyTorch dropped Intel-Mac support after 2.2.2, so install a compatible build before the next step: `pip install "torch==2.2.2"`. Apple Silicon, Linux, and Windows users can skip this.
-
 ### 2. Install
 
 ```bash
