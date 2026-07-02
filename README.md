@@ -10,7 +10,7 @@ The supplied gold-standard reference document is the OECD economic outlook for 2
 
 3. It's a project where hallucination have real-world consequences. Providing inaccurate GDP projections result in incorrect interest rates set by financial institutions, leading to financial instability and unfair lending practices. 
 
-This project is built with LangChain + Together AI (Llama 3.1 70B). Originally prototyped in a notebook, refactored into a tested, containerised, deployable service.
+This project is built with LangChain + Cloudflare Workers AI (Llama 3.1 8B). Originally prototyped in a notebook, refactored into a tested, containerised, deployable service.
 
 ---
 
@@ -68,7 +68,7 @@ src/llm_qa/
 ├── config/settings.py        # env-based, validated configuration (pydantic-settings)
 ├── core/
 │   ├── document_loader.py     # PDF reading + validation
-│   ├── llm_provider.py        # Together AI LLM wrapper (retries, timeouts)
+│   ├── llm_provider.py        # Cloudflare Workers AI LLM wrapper (retries, timeouts)
 │   ├── exceptions.py          # typed error hierarchy
 │   └── logging_config.py      # structured logging (text or JSON)
 ├── retrieval/                 # the RAG layer
@@ -131,7 +131,7 @@ pip install -e ".[dev]"
 
 ```bash
 cp .env.example .env
-# edit .env and set LLMQA_TOGETHER_API_KEY
+# edit .env and set LLMQA_CLOUDFLARE_API_KEY and LLMQA_CLOUDFLARE_ACCOUNT_ID
 ```
 
 ### 3. Run the CLI
@@ -198,7 +198,8 @@ curl -X POST http://localhost:8000/ask \
 ### 7. Run with Docker
 
 ```bash
-export LLMQA_TOGETHER_API_KEY=your_key_here
+export LLMQA_CLOUDFLARE_API_KEY=your_key_here
+export LLMQA_CLOUDFLARE_ACCOUNT_ID=your_account_id_here
 docker compose up --build
 ```
 
@@ -219,8 +220,9 @@ All settings are environment variables prefixed `LLMQA_` (or set in `.env`):
 
 | Variable | Default | Description |
 |---|---|---|
-| `LLMQA_TOGETHER_API_KEY` | *(required)* | Together AI API key |
-| `LLMQA_MODEL_NAME` | `meta-llama/Meta-Llama-3.1-70B-Instruct-Turbo` | Inference model |
+| `LLMQA_CLOUDFLARE_API_KEY` | *(required)* | Cloudflare API key |
+| `LLMQA_CLOUDFLARE_ACCOUNT_ID` | *(required)* | Cloudflare Account ID |
+| `LLMQA_MODEL_NAME` | `@cf/meta/llama-3.1-8b-instruct` | Cloudflare Workers AI model identifier |
 | `LLMQA_TEMPERATURE` | `0.7` | Sampling temperature |
 | `LLMQA_MAX_TOKENS` | `2000` | Max output tokens |
 | `LLMQA_MAX_REFINEMENT_ITERATIONS` | `5` | Max refine passes |
