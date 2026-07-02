@@ -8,8 +8,7 @@ report metrics:
   * Adversarial questions -> did the system correctly DECLINE instead of
     fabricating an answer? (the abstention / anti-hallucination rate)
 
-This separates "looks like it works" from "provably stays faithful", which is
-the single most impressive thing to show a technical interviewer.
+This separates "looks like it works" from "provably stays faithful".
 
 Example:
     python scripts/run_evaluation.py \
