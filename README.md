@@ -134,7 +134,18 @@ cp .env.example .env
 # edit .env and set LLMQA_CLOUDFLARE_API_KEY and LLMQA_CLOUDFLARE_ACCOUNT_ID
 ```
 
-### 4. Run the CLI
+### 4. Get the reference document
+
+The CLI and evaluation harness expect `data/oecd_outlook_2026.pdf`, which isn't committed to git (see `data/*.pdf` in `.gitignore`) since it's a large, third-party binary.
+
+`scripts/download_data.py` exists to automate this, but OECD's site currently sits behind a Cloudflare bot challenge that blocks non-browser requests, so the automated fetch returns `403 Forbidden`. Until that's resolved, download it manually:
+
+1. Open [the OECD Economic Outlook landing page](https://doi.org/10.1787/2d1956f0-en) in a browser and download the PDF.
+2. Save it as `data/oecd_outlook_2026.pdf` in your clone of this repo.
+
+Once downloaded, `python scripts/download_data.py` will detect the existing file and skip re-fetching (or re-run it later if OECD's access restrictions change).
+
+### 5. Run the CLI
 
 ```bash
 # Single question
@@ -147,7 +158,7 @@ python scripts/run_qa.py --pdf data/oecd_outlook_2026.pdf --questions-file quest
 python scripts/compare_baseline.py --pdf data/oecd_outlook_2026.pdf --question "Under the prolonged disruption scenario, what is projected global growth for 2026 and 2027?"
 ```
 
-### 5. Run RAG over a large document
+### 6. Run RAG over a large document
 
 For large documents (e.g. the 300-page OECD Economic Outlook), use retrieval
 instead of stuffing the whole document into the prompt. Index once, then query:
@@ -160,7 +171,7 @@ python scripts/index_document.py --pdf data/oecd_outlook_2026.pdf
 # factory in code. Re-index with --force after changing chunk settings.
 ```
 
-### 6. Run the evaluation harness
+### 7. Run the evaluation harness
 
 This is the project's headline deliverable: a faithfulness benchmark over a
 hand-labelled gold set, plus adversarial questions that test whether the system
@@ -181,7 +192,7 @@ The adversarial set is the most informative number: a system that scores well on
 answerable questions but fabricates answers to the adversarial ones is not
 production-safe. Reporting both is what separates a real RAG evaluation from a demo.
 
-### 7. Run the API
+### 8. Run the API
 
 ```bash
 make api          # or: uvicorn llm_qa.api.main:app --reload
@@ -195,7 +206,7 @@ curl -X POST http://localhost:8000/ask \
   -d '{"reference": "Global growth is projected to slow from 3.4% in 2025 to 2.8% in 2026 before recovering to 3.1% in 2027.", "question": "What is the projected global growth for 2026?"}'
 ```
 
-### 8. Run with Docker
+### 9. Run with Docker
 
 ```bash
 export LLMQA_CLOUDFLARE_API_KEY=your_key_here
