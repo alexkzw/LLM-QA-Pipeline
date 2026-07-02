@@ -36,7 +36,7 @@ Two entry points are available: `answer()` (stuff the whole document — fine fo
                                                 ▼
                                    ┌────────────────────────┐
                                    │   Retriever (RAG)      │
-                                   │  chunk → embed → store │   (index once)
+                                   │  chunk → embed → store │   (index once)         
                                    │  (Chroma vector store) │
                                    └────────────────────────┘
                                                 │
@@ -127,14 +127,14 @@ conda activate llmqa
 pip install -e ".[dev]"
 ```
 
-### 2. Configure
+### 3. Configure
 
 ```bash
 cp .env.example .env
 # edit .env and set LLMQA_CLOUDFLARE_API_KEY and LLMQA_CLOUDFLARE_ACCOUNT_ID
 ```
 
-### 3. Run the CLI
+### 4. Run the CLI
 
 ```bash
 # Single question
@@ -147,7 +147,7 @@ python scripts/run_qa.py --pdf data/oecd_outlook_2026.pdf --questions-file quest
 python scripts/compare_baseline.py --pdf data/oecd_outlook_2026.pdf --question "Under the prolonged disruption scenario, what is projected global growth for 2026 and 2027?"
 ```
 
-### 4. Run RAG over a large document
+### 5. Run RAG over a large document
 
 For large documents (e.g. the 300-page OECD Economic Outlook), use retrieval
 instead of stuffing the whole document into the prompt. Index once, then query:
@@ -160,7 +160,7 @@ python scripts/index_document.py --pdf data/oecd_outlook_2026.pdf
 # factory in code. Re-index with --force after changing chunk settings.
 ```
 
-### 5. Run the evaluation harness
+### 6. Run the evaluation harness
 
 This is the project's headline deliverable: a faithfulness benchmark over a
 hand-labelled gold set, plus adversarial questions that test whether the system
@@ -181,7 +181,7 @@ The adversarial set is the most informative number: a system that scores well on
 answerable questions but fabricates answers to the adversarial ones is not
 production-safe. Reporting both is what separates a real RAG evaluation from a demo.
 
-### 6. Run the API
+### 7. Run the API
 
 ```bash
 make api          # or: uvicorn llm_qa.api.main:app --reload
@@ -195,7 +195,7 @@ curl -X POST http://localhost:8000/ask \
   -d '{"reference": "Global growth is projected to slow from 3.4% in 2025 to 2.8% in 2026 before recovering to 3.1% in 2027.", "question": "What is the projected global growth for 2026?"}'
 ```
 
-### 7. Run with Docker
+### 8. Run with Docker
 
 ```bash
 export LLMQA_CLOUDFLARE_API_KEY=your_key_here
