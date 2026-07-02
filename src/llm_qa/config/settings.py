@@ -23,15 +23,19 @@ class Settings(BaseSettings):
     )
 
     # --- Secrets (never hard-code; supplied via env) -------------------
-    cloudfare_api_key: str = Field(
+    cloudflare_api_key: str = Field(
         ...,
-        description="CloudFare API key. Set via LLMQA_CLOUDFARE_API_KEY.",
+        description="Cloudflare API key. Set via LLMQA_CLOUDFLARE_API_KEY.",
+    )
+    cloudflare_account_id: str = Field(
+        ...,
+        description="Cloudflare Account ID. Set via LLMQA_CLOUDFLARE_ACCOUNT_ID.",
     )
 
     # --- Model configuration ------------------------------------------
     model_name: str = Field(
-        default="meta-llama/Meta-Llama-3.1-70B-Instruct-Turbo",
-        description="Inference model identifier.",
+        default="@cf/meta/llama-3.1-8b-instruct",
+        description="Cloudflare Workers AI model identifier.",
     )
     temperature: float = Field(default=0.7, ge=0.0, le=2.0)
     max_tokens: int = Field(default=2000, gt=0)
