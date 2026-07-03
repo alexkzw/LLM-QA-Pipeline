@@ -47,10 +47,12 @@ Two entry points are available: `answer()` (stuff the whole document — fine fo
                     │  ┌──────────┐   ┌───────────┐        │
                     │  │ generate │──▶│ validate  │──┐     │
                     │  └──────────┘   └───────────┘  │     │
-                    │       ▲          grounded? ── no ──┐ │
-                    │       │              │ yes         │ │
-                    │       └── refine ◀───┘             │ │
-                    │                                    ▼ │
+                    │                  ▲         grounded? │
+                    │                  │      no ----|     | 
+                    │               refine ◀───┘     |     | 
+                    │                                │ yes │ 
+                    │                     │──────────┘     │ 
+                    │                     ▼                │ 
                     │            structured QAResult       │
                     │   (answer + grounded? + chunk IDs)   │
                     └──────────────────────────────────────┘
