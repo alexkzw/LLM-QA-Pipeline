@@ -169,6 +169,8 @@ class QAPipeline:
         retrieved = self._retriever.retrieve(
             question, top_k=self._settings.retrieval_top_k
         )
+
+        # format matched chunks (plain strings) into a numbered text block
         context = self._retriever.format_context(retrieved)
 
         initial_answer = self._run_chain(
