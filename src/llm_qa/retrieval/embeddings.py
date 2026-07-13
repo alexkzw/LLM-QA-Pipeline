@@ -19,6 +19,8 @@ logger = get_logger(__name__)
 DEFAULT_EMBEDDING_MODEL = "sentence-transformers/all-MiniLM-L6-v2"
 
 
+# cache loaded model by model_name to reuse already loaded weights
+# instead of re-reading them from disk
 @lru_cache(maxsize=2)
 def _load_model(model_name: str):
     """Load and cache a SentenceTransformer model (imported lazily)."""
