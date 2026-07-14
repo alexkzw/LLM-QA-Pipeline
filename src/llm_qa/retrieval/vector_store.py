@@ -37,9 +37,15 @@ class VectorStore:
         import chromadb
 
         self._embedder = embedding_model
+
+        # need persistence because indexing is meant to happen once
         self._client = chromadb.PersistentClient(path=str(persist_dir))
         self._collection = self._client.get_or_create_collection(
             name=collection_name,
+
+            # explicitly use cosine similarity - Chroma's default is squared L2
+            # HNSW - Hierarchical Navigable Small World - an approximate
+            # nearest-neighbour graph that is suitable if our corpus gets too large
             metadata={"hnsw:space": "cosine"},
         )
 
@@ -86,6 +92,8 @@ class VectorStore:
                 RetrievedChunk(
                     chunk_id=int(chunk_id),
                     text=text,
+                    # encapsulate so that we normalise to one consistent semantic
+                    # i.e., higher is better
                     score=1.0 - float(distance),
                 )
             )
