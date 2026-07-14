@@ -74,6 +74,11 @@ class QAPipeline:
         self._initial_prompt = build_initial_prompt()
         self._retriever = retriever
 
+    def close(self) -> None:
+        """Release resources held by the underlying LLM (e.g. HTTP connections)."""
+        if self._llm is not None:
+            self._llm.close()
+
     def _run_chain(self, template: BasePromptTemplate, inputs: dict) -> str:
         """Pipe a prompt template into the LLM and return the text."""
         runnable = template | self._llm
