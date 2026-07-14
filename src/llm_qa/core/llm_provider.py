@@ -12,7 +12,7 @@ from langchain_core.language_models.llms import LLM
 from pydantic import Field, PrivateAttr
 from tenacity import (
     retry,
-    retry_if_exception_type,
+    retry_if_exception,
     stop_after_attempt,
     wait_exponential,
 )
@@ -24,6 +24,28 @@ from llm_qa.core.logging_config import get_logger
 logger = get_logger(__name__)
 
 _CLOUDFLARE_API_BASE = "https://api.cloudflare.com/client/v4/accounts"
+
+# 5xx (transient server-side failure) and 429 (rate limit) are worth retrying;
+# other 4xx status codes (bad request, bad auth, unknown model) are permanent
+# and would fail identically on every attempt.
+_RETRYABLE_STATUS_CODES = frozenset({429, 500, 502, 503, 504})
+
+
+def _is_retryable(exc: BaseException) -> bool:
+    """Retry transient failures only, not permanent client errors.
+
+    Network-level failures (timeouts, connection errors) and retryable HTTP
+    status codes are worth another attempt. A well-formed response that
+    Cloudflare flagged as failed, or an empty completion, is also retried -
+    that's a response we did receive, just not a usable one, and it's
+    plausibly a transient provider glitch rather than a config error we can
+    diagnose from the response alone.
+    """
+    if isinstance(exc, httpx.TransportError):
+        return True
+    if isinstance(exc, httpx.HTTPStatusError):
+        return exc.response.status_code in _RETRYABLE_STATUS_CODES
+    return isinstance(exc, LLMProviderError)
 
 
 class CloudflareWorkersAILLM(LLM):
@@ -48,8 +70,20 @@ class CloudflareWorkersAILLM(LLM):
         self._client = httpx.Client(
             base_url=f"{_CLOUDFLARE_API_BASE}/{settings.cloudflare_account_id}/ai/run",
             headers={"Authorization": f"Bearer {settings.cloudflare_api_key}"},
-            timeout=settings.request_timeout_seconds,
+            # Connect should fail fast - a slow handshake means connectivity
+            # trouble, not a model that needs more time. Read gets the full
+            # configured budget since that's the leg that waits on generation.
+            timeout=httpx.Timeout(
+                connect=5.0,
+                read=settings.request_timeout_seconds,
+                write=settings.request_timeout_seconds,
+                pool=5.0,
+            ),
         )
+
+    def close(self) -> None:
+        """Release the underlying HTTP connection pool."""
+        self._client.close()
 
     @property
     def _llm_type(self) -> str:
@@ -65,7 +99,7 @@ class CloudflareWorkersAILLM(LLM):
         """Send a single prompt to Cloudflare Workers AI and return the completion text."""
 
         @retry(
-            retry=retry_if_exception_type(Exception),
+            retry=retry_if_exception(_is_retryable),
             stop=stop_after_attempt(self.max_retries),
             wait=wait_exponential(multiplier=1, min=2, max=30),
             reraise=True,
@@ -92,6 +126,11 @@ class CloudflareWorkersAILLM(LLM):
 
         try:
             return _invoke()
+        except LLMProviderError as exc:
+            # _invoke already raises this type directly (empty response,
+            # success: false) - don't wrap an LLMProviderError in another one.
+            logger.error("Cloudflare Workers AI request failed: %s", exc)
+            raise
         except Exception as exc:  # noqa: BLE001 - typed re-raise
             logger.error("Cloudflare Workers AI request failed: %s", exc)
             raise LLMProviderError(f"LLM provider request failed: {exc}") from exc
