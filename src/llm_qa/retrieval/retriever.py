@@ -11,6 +11,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from llm_qa.core.exceptions import RetrievalError
 from llm_qa.core.logging_config import get_logger
 from llm_qa.retrieval.chunking import chunk_text
 from llm_qa.retrieval.embeddings import EmbeddingModel
@@ -43,13 +44,19 @@ class Retriever:
 
         Returns the number of chunks in the index.
         """
-        if self.is_indexed and not force:
+        if self.is_indexed:
+            if not force:
+                logger.info(
+                    "Index already populated (%d chunks); skipping. "
+                    "Pass force=True to rebuild.",
+                    len(self._store),
+                )
+                return len(self._store)
             logger.info(
-                "Index already populated (%d chunks); skipping. "
-                "Pass force=True to rebuild.",
+                "Rebuilding index: clearing %d existing chunk(s) first.",
                 len(self._store),
             )
-            return len(self._store)
+            self._store.clear()
 
         chunks = chunk_text(
             text,
@@ -62,7 +69,7 @@ class Retriever:
     def retrieve(self, question: str, top_k: int = 5) -> list[RetrievedChunk]:
         """Return the most relevant chunks for a question."""
         if not self.is_indexed:
-            raise RuntimeError("Retriever has no index; call index_document first.")
+            raise RetrievalError("Retriever has no index; call index_document first.")
         return self._store.search(question, top_k=top_k)
 
     @staticmethod
