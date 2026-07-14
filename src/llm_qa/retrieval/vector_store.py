@@ -37,6 +37,7 @@ class VectorStore:
         import chromadb
 
         self._embedder = embedding_model
+        self._collection_name = collection_name
 
         # need persistence because indexing is meant to happen once
         self._client = chromadb.PersistentClient(path=str(persist_dir))
@@ -51,6 +52,21 @@ class VectorStore:
 
     def __len__(self) -> int:
         return self._collection.count()
+
+    def clear(self) -> None:
+        """Delete all chunks, leaving an empty collection ready for re-indexing.
+
+        ``index_chunks`` upserts by id, so it never removes chunks left over
+        from a *previous* document that the new one doesn't overwrite (e.g.
+        re-indexing a shorter document leaves the old tail's chunks orphaned in
+        the store, silently polluting future retrieval). Call this before
+        rebuilding from a different document.
+        """
+        self._client.delete_collection(name=self._collection_name)
+        self._collection = self._client.get_or_create_collection(
+            name=self._collection_name,
+            metadata={"hnsw:space": "cosine"},
+        )
 
     def index_chunks(self, chunks: list[Chunk], batch_size: int = 128) -> None:
         """Embed and store chunks. Idempotent on chunk_id (upsert)."""
