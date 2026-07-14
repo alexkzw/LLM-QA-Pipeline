@@ -24,3 +24,7 @@ class DocumentTooLargeError(DocumentError):
 
 class LLMProviderError(LLMQAError):
     """Raised when the upstream LLM provider fails (network, auth, rate limit)."""
+
+
+class RetrievalError(LLMQAError):
+    """Raised when retrieval is attempted before the index has been built."""
