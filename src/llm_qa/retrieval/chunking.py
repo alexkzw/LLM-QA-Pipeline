@@ -47,7 +47,7 @@ def chunk_text(
 
     Args:
         text: The full document text.
-        chunk_size: Target maximum characters per chunk.
+        chunk_size: Target maximum characters per chunk.    
         chunk_overlap: Characters of trailing context to repeat at the start of
             the next chunk, so facts spanning a boundary are not lost.
 
@@ -58,12 +58,15 @@ def chunk_text(
         raise ValueError("chunk_overlap must be smaller than chunk_size.")
 
     sentences = _split_sentences(text)
-    chunks: list[Chunk] = []
-    buffer = ""
-    buffer_start = 0
+    chunks: list[Chunk] = [] # the growing output list
+    buffer = "" # the text of chunk currently being built
+    buffer_start = 0 #
     cursor = 0  # running char position in the original text
 
+    # take whatever's currently in the buffer and turn it into a real 
+    # Chunk appended to the output list
     def _flush(buf: str, start: int) -> None:
+        # guards against creating an empty chunk
         if buf.strip():
             chunks.append(
                 Chunk(
