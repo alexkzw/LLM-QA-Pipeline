@@ -33,6 +33,7 @@ async def lifespan(app: FastAPI):
     logger.info("Building QA pipeline at startup...")
     _state["pipeline"] = build_pipeline(settings)
     yield
+    _state["pipeline"].close()
     _state.clear()
 
 
