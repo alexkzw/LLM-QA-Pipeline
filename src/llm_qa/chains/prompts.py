@@ -7,6 +7,8 @@ from __future__ import annotations
 
 from langchain_core.prompts import FewShotPromptTemplate, PromptTemplate
 
+from llm_qa.chains.example_bank import FewShotExample
+
 # --- Few-shot examples (grounded in the reference document) -------------
 # Deliberately simple factual snippets that demonstrate the desired answer
 # style: grounded, attributed, and concise. These are drawn from the OECD
@@ -65,19 +67,39 @@ def build_initial_prompt() -> FewShotPromptTemplate:
 
 
 # --- RAG prompt (operates over retrieved chunks, not the whole document) ---
-RAG_PROMPT = PromptTemplate(
-    input_variables=["context", "question"],
-    template=(
-        "You are an assistant answering questions about a document. Use ONLY "
-        "the numbered context passages below. Cite the passages you rely on "
-        "using their bracket numbers, e.g. [1] or [2].\n\n"
-        "If the context does not contain enough information to answer, reply "
-        "exactly: 'The reference does not provide enough information to answer "
-        "this question.' Do not guess or use outside knowledge.\n\n"
-        "Context passages:\n{context}\n\n"
-        "Question: {question}\n\nAnswer:"
-    ),
+_RAG_EXAMPLE_PROMPT = PromptTemplate.from_template(
+    "Context passages:\n{context}\n\nQuestion: {question}\nAnswer: {answer}"
 )
+
+_RAG_PREFIX = (
+    "You are an assistant answering questions about a document. Use ONLY "
+    "the numbered context passages below. Cite the passages you rely on "
+    "using their bracket numbers, e.g. [1] or [2].\n\n"
+    "If the context does not contain enough information to answer, reply "
+    "exactly: 'The reference does not provide enough information to answer "
+    "this question.' Do not guess or use outside knowledge.\n"
+)
+
+_RAG_SUFFIX = "Context passages:\n{context}\n\nQuestion: {question}\n\nAnswer:"
+
+
+def build_rag_prompt(examples: list[FewShotExample]) -> FewShotPromptTemplate:
+    """RAG prompt with dynamically-selected few-shot examples.
+
+    Unlike ``build_initial_prompt``'s fixed few-shot set, the examples here
+    vary per question (see ``RagExampleSelector``), so this builds a fresh
+    template per call instead of being a module-level constant.
+    """
+    return FewShotPromptTemplate(
+        prefix=_RAG_PREFIX,
+        suffix=_RAG_SUFFIX,
+        examples=[
+            {"context": e.context, "question": e.question, "answer": e.answer}
+            for e in examples
+        ],
+        example_prompt=_RAG_EXAMPLE_PROMPT,
+        input_variables=["context", "question"],
+    )
 
 
 VALIDATION_PROMPT = PromptTemplate(
@@ -92,11 +114,16 @@ VALIDATION_PROMPT = PromptTemplate(
 )
 
 REFINEMENT_PROMPT = PromptTemplate(
-    input_variables=["reference", "response"],
+    input_variables=["reference", "response", "validation"],
     template=(
-        "The previous answer contained unsupported claims. Using ONLY the "
-        "reference below, rewrite the answer so that every statement is fully "
-        "supported. If a point cannot be supported, omit it.\n\n"
+        "The previous answer was fact-checked against the reference, claim "
+        "by claim, with this result:\n\n{validation}\n\n"
+        "Using ONLY the reference below, rewrite the answer:\n"
+        "1. For each claim marked UNSUPPORTED or PARTIALLY SUPPORTED above, "
+        "identify exactly what the reference does or doesn't say about it.\n"
+        "2. Rewrite the answer so every remaining statement is fully "
+        "supported by the reference - if a claim cannot be supported, omit "
+        "it rather than guessing.\n\n"
         "Reference:\n{reference}\n\nCurrent answer:\n{response}\n\n"
         "Revised answer:"
     ),
