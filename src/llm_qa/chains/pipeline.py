@@ -12,13 +12,16 @@ from dataclasses import dataclass, field
 
 from langchain_core.prompts import BasePromptTemplate
 
+from llm_qa.chains.ensemble_validator import EnsembleValidator, ValidatorVote
+from llm_qa.chains.example_bank import RagExampleSelector
+from llm_qa.chains.grounding import is_fully_grounded
 from llm_qa.chains.prompts import (
-    RAG_PROMPT,
     REFINEMENT_PROMPT,
-    VALIDATION_PROMPT,
     build_initial_prompt,
+    build_rag_prompt,
 )
 from llm_qa.config.settings import Settings
+from llm_qa.core.exceptions import ConfigurationError
 from llm_qa.core.llm_provider import CloudflareWorkersAILLM
 from llm_qa.core.logging_config import get_logger
 from llm_qa.retrieval.retriever import Retriever
@@ -34,6 +37,7 @@ class RefinementStep:
     validation_result: str
     is_grounded: bool
     answer_after_refinement: str | None = None
+    validator_votes: list[ValidatorVote] = field(default_factory=list)
 
 
 @dataclass
@@ -50,16 +54,6 @@ class QAResult:
     retrieved_context: str | None = None
 
 
-def _is_fully_grounded(validation_text: str) -> bool:
-    """Return True only if the validator flagged no unsupported claims.
-
-    More robust than the notebook's raw substring check: normalises case and
-    looks for the specific negative labels as whole tokens.
-    """
-    upper = validation_text.upper()
-    return "UNSUPPORTED" not in upper and "PARTIALLY SUPPORTED" not in upper
-
-
 class QAPipeline:
     """Grounded QA with iterative, fact-checked self-refinement."""
 
@@ -68,21 +62,45 @@ class QAPipeline:
         llm: CloudflareWorkersAILLM,
         settings: Settings,
         retriever: Retriever | None = None,
+        ensemble_validator: EnsembleValidator | None = None,
+        rag_example_selector: RagExampleSelector | None = None,
     ) -> None:
         self._llm = llm
         self._settings = settings
         self._initial_prompt = build_initial_prompt()
         self._retriever = retriever
+        self._ensemble_validator = (
+            ensemble_validator
+            if ensemble_validator is not None
+            else EnsembleValidator(settings)
+        )
+        if rag_example_selector is not None:
+            self._rag_example_selector = rag_example_selector
+        elif retriever is not None:
+            self._rag_example_selector = RagExampleSelector(retriever.embedder)
+        else:
+            self._rag_example_selector = None
 
     def close(self) -> None:
         """Release resources held by the underlying LLM (e.g. HTTP connections)."""
         if self._llm is not None:
             self._llm.close()
+        if self._ensemble_validator is not None:
+            self._ensemble_validator.close()
 
     def _run_chain(self, template: BasePromptTemplate, inputs: dict) -> str:
         """Pipe a prompt template into the LLM and return the text."""
         runnable = template | self._llm
         return runnable.invoke(inputs)
+
+    @staticmethod
+    def _summarise_votes(votes: list[ValidatorVote]) -> str:
+        def _label(vote: ValidatorVote) -> str:
+            if vote.grounded is None:
+                return "failed"
+            return "grounded" if vote.grounded else "unsupported"
+
+        return "; ".join(f"{v.model_name}={_label(v)}" for v in votes)
 
     def _refine_against(
         self, reference: str, initial_answer: str
@@ -90,41 +108,53 @@ class QAPipeline:
         """Run the validate->refine loop against a reference text.
 
         Shared by both the full-document and retrieval-based entry points.
-        Returns (final_answer, history, fully_grounded).
+        Validation is a majority vote across several independent models
+        (see EnsembleValidator) rather than a single model checking its own
+        output. Returns (final_answer, history, fully_grounded).
         """
         answer = initial_answer
         history: list[RefinementStep] = []
         fully_grounded = False
 
         for i in range(1, self._settings.max_refinement_iterations + 1):
-            validation = self._run_chain(
-                VALIDATION_PROMPT,
-                {"reference": reference, "response": answer},
-            )
-            grounded = _is_fully_grounded(validation)
-            logger.info("Iteration %d grounded=%s", i, grounded)
+            grounded, votes = self._ensemble_validator.validate(reference, answer)
+            summary = self._summarise_votes(votes)
+            logger.info("Iteration %d majority_grounded=%s (%s)", i, grounded, summary)
 
             if grounded:
                 history.append(
                     RefinementStep(
                         iteration=i,
-                        validation_result=validation,
+                        validation_result=summary,
                         is_grounded=True,
+                        validator_votes=votes,
                     )
                 )
                 fully_grounded = True
                 break
 
+            # Feed the refiner every validator's claim-by-claim breakdown,
+            # not just one - it can catch issues only one of them flagged.
+            combined_validation = "\n\n".join(
+                f"--- Validator ({v.model_name}) ---\n{v.text}"
+                for v in votes
+                if v.grounded is not None
+            )
             refined = self._run_chain(
                 REFINEMENT_PROMPT,
-                {"reference": reference, "response": answer},
+                {
+                    "reference": reference,
+                    "response": answer,
+                    "validation": combined_validation,
+                },
             )
             history.append(
                 RefinementStep(
                     iteration=i,
-                    validation_result=validation,
+                    validation_result=summary,
                     is_grounded=False,
                     answer_after_refinement=refined,
+                    validator_votes=votes,
                 )
             )
             answer = refined
@@ -164,7 +194,7 @@ class QAPipeline:
         chunks are sent to the LLM, not the whole document.
         """
         if self._retriever is None:
-            raise RuntimeError(
+            raise ConfigurationError(
                 "Pipeline was built without a retriever; "
                 "use build_rag_pipeline()."
             )
@@ -178,8 +208,17 @@ class QAPipeline:
         # format matched chunks (plain strings) into a numbered text block
         context = self._retriever.format_context(retrieved)
 
+        # Few-shot examples are selected per-question (most relevant to this
+        # question specifically), not a fixed set injected every time.
+        examples = (
+            self._rag_example_selector.select(question, k=2)
+            if self._rag_example_selector is not None
+            else []
+        )
+        prompt = build_rag_prompt(examples)
+
         initial_answer = self._run_chain(
-            RAG_PROMPT,
+            prompt,
             {"context": context, "question": question},
         )
         # Refinement is validated against the retrieved context (the only
