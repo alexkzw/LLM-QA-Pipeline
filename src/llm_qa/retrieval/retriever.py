@@ -42,6 +42,12 @@ class Retriever:
         self._fingerprint_path = Path(persist_dir) / "index_fingerprint.json"
 
     @property
+    def embedder(self) -> EmbeddingModel:
+        """The embedder backing this index - reused by anything else that
+        needs vectors comparable to it (e.g. dynamic few-shot selection)."""
+        return self._embedder
+
+    @property
     def is_indexed(self) -> bool:
         return len(self._store) > 0
 
