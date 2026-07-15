@@ -6,10 +6,40 @@ no embedding model download or network call is needed.
 """
 from __future__ import annotations
 
+from llm_qa.chains.ensemble_validator import ValidatorVote
 from llm_qa.chains.pipeline import QAPipeline
 from llm_qa.config.settings import Settings
+from llm_qa.core.exceptions import ConfigurationError
 from llm_qa.retrieval.chunking import chunk_text
 from llm_qa.retrieval.vector_store import RetrievedChunk
+
+
+class FakeEnsembleValidator:
+    """Scripted stand-in for EnsembleValidator - no real model calls."""
+
+    def __init__(self, results: list[tuple[bool, str]]) -> None:
+        self._results = list(results)
+
+    def validate(self, reference, response):  # noqa: ARG002
+        grounded, text = (
+            self._results.pop(0) if self._results else (True, "SUPPORTED.")
+        )
+        return grounded, [ValidatorVote(model_name="fake-model", grounded=grounded, text=text)]
+
+    def close(self) -> None:
+        pass
+
+
+class FakeEmbedder:
+    """Cheap deterministic stand-in for EmbeddingModel - no real inference."""
+
+    model_name = "fake-embedder"
+
+    def embed(self, texts: list[str]) -> list[list[float]]:
+        return [[float(len(t) % 7), float(sum(map(ord, t)) % 13)] for t in texts]
+
+    def embed_one(self, text: str) -> list[float]:
+        return self.embed([text])[0]
 
 
 def _settings() -> Settings:
@@ -56,6 +86,10 @@ class FakeRetriever:
     def format_context(chunks: list[RetrievedChunk]) -> str:
         return "\n\n".join(f"[{i + 1}] {c.text}" for i, c in enumerate(chunks))
 
+    @property
+    def embedder(self) -> FakeEmbedder:
+        return FakeEmbedder()
+
 
 def test_answer_with_retrieval_grounds_in_chunks(monkeypatch) -> None:
     chunks = [
@@ -70,12 +104,12 @@ def test_answer_with_retrieval_grounds_in_chunks(monkeypatch) -> None:
         llm=None,  # type: ignore[arg-type]
         settings=_settings(),
         retriever=FakeRetriever(chunks),  # type: ignore[arg-type]
+        ensemble_validator=FakeEnsembleValidator([(True, "All claims SUPPORTED.")]),  # type: ignore[arg-type]
     )
 
-    # Script the LLM: first an answer, then a clean validation.
-    scripted = iter(
-        ["Global growth slows to 2.8% in 2026 [1].", "All claims SUPPORTED."]
-    )
+    # Script the LLM: just the initial answer (validation no longer runs
+    # through _run_chain - it's the FakeEnsembleValidator above).
+    scripted = iter(["Global growth slows to 2.8% in 2026 [1]."])
     monkeypatch.setattr(
         QAPipeline, "_run_chain", lambda self, t, i: next(scripted)
     )
@@ -90,6 +124,10 @@ def test_answer_with_retrieval_grounds_in_chunks(monkeypatch) -> None:
 def test_answer_with_retrieval_requires_retriever() -> None:
     import pytest
 
-    pipeline = QAPipeline(llm=None, settings=_settings())  # type: ignore[arg-type]
-    with pytest.raises(RuntimeError, match="without a retriever"):
+    pipeline = QAPipeline(
+        llm=None,  # type: ignore[arg-type]
+        settings=_settings(),
+        ensemble_validator=FakeEnsembleValidator([]),  # type: ignore[arg-type]
+    )
+    with pytest.raises(ConfigurationError, match="without a retriever"):
         pipeline.answer_with_retrieval("anything?")
