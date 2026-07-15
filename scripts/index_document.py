@@ -2,7 +2,14 @@
 """Standalone CLI: index a PDF into the vector store for RAG.
 
 One job: read a PDF, chunk it, embed the chunks, and persist them to the Chroma
-index so the RAG pipeline can retrieve from them. Run this once per document.
+index so the RAG pipeline can retrieve from them.
+
+Safe to run every time, on any PDF - you don't need to remember whether a
+given document was already indexed. A fingerprint of the document's content,
+chunk settings, and embedding model is persisted alongside the index:
+  * same document, same settings  -> detected automatically, skipped (no-op)
+  * different document or settings -> detected automatically, rebuilt
+  * --force                        -> always rebuilds, regardless
 
 Example:
     python scripts/index_document.py --pdf data/oecd_economic_outlook_2026.pdf
