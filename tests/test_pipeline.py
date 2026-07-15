@@ -8,15 +8,17 @@ from __future__ import annotations
 
 import pytest
 
-from llm_qa.chains.pipeline import QAPipeline, _is_fully_grounded
+from llm_qa.chains.ensemble_validator import ValidatorVote
+from llm_qa.chains.grounding import is_fully_grounded
+from llm_qa.chains.pipeline import QAPipeline
 from llm_qa.config.settings import Settings
 
 
 class FakeLLM:
     """A scripted stand-in for the real LLM.
 
-    Returns queued responses in order, so we can simulate a validator that
-    first reports an unsupported claim and then reports a clean answer.
+    Covers generation and refinement calls (validation no longer goes
+    through ``_run_chain`` - see FakeEnsembleValidator below).
     """
 
     def __init__(self, responses: list[str]) -> None:
@@ -28,6 +30,26 @@ class FakeLLM:
         if self._responses:
             return self._responses.pop(0)
         return "SUPPORTED. Overall verdict: all claims supported."
+
+
+class FakeEnsembleValidator:
+    """A scripted stand-in for EnsembleValidator's majority vote.
+
+    Returns queued (grounded, text) results in order, so a test can script
+    "unsupported, then supported" without hitting any real model.
+    """
+
+    def __init__(self, results: list[tuple[bool, str]]) -> None:
+        self._results = list(results)
+
+    def validate(self, reference, response):  # noqa: ARG002
+        grounded, text = (
+            self._results.pop(0) if self._results else (True, "SUPPORTED.")
+        )
+        return grounded, [ValidatorVote(model_name="fake-model", grounded=grounded, text=text)]
+
+    def close(self) -> None:
+        pass
 
 
 def _settings() -> Settings:
@@ -57,19 +79,19 @@ def _patch_runnable(monkeypatch, fake: FakeLLM) -> None:
     ],
 )
 def test_is_fully_grounded(validation_text: str, expected: bool) -> None:
-    assert _is_fully_grounded(validation_text) is expected
+    assert is_fully_grounded(validation_text) is expected
 
 
 def test_pipeline_returns_immediately_when_grounded(monkeypatch) -> None:
     # initial answer, then a clean validation -> no refinement needed
-    fake = FakeLLM(
-        [
-            "Initial grounded answer.",
-            "All claims SUPPORTED. Verdict: supported.",
-        ]
+    fake_llm = FakeLLM(["Initial grounded answer."])
+    validator = FakeEnsembleValidator([(True, "All claims SUPPORTED.")])
+    pipeline = QAPipeline(
+        llm=None,  # type: ignore[arg-type]
+        settings=_settings(),
+        ensemble_validator=validator,  # type: ignore[arg-type]
     )
-    pipeline = QAPipeline(llm=None, settings=_settings())  # type: ignore[arg-type]
-    _patch_runnable(monkeypatch, fake)
+    _patch_runnable(monkeypatch, fake_llm)
 
     result = pipeline.answer("reference text", "a question?")
 
@@ -79,16 +101,24 @@ def test_pipeline_returns_immediately_when_grounded(monkeypatch) -> None:
 
 
 def test_pipeline_refines_then_succeeds(monkeypatch) -> None:
-    fake = FakeLLM(
+    fake_llm = FakeLLM(
         [
-            "Initial answer with a bad claim.",       # initial generation
-            "Claim 1: UNSUPPORTED",                   # validation #1 -> refine
-            "Refined, fully supported answer.",       # refinement #1
-            "All claims SUPPORTED. Verdict: ok.",     # validation #2 -> stop
+            "Initial answer with a bad claim.",  # initial generation
+            "Refined, fully supported answer.",  # refinement #1
         ]
     )
-    pipeline = QAPipeline(llm=None, settings=_settings())  # type: ignore[arg-type]
-    _patch_runnable(monkeypatch, fake)
+    validator = FakeEnsembleValidator(
+        [
+            (False, "Claim 1: UNSUPPORTED"),  # validation #1 -> refine
+            (True, "All claims SUPPORTED."),  # validation #2 -> stop
+        ]
+    )
+    pipeline = QAPipeline(
+        llm=None,  # type: ignore[arg-type]
+        settings=_settings(),
+        ensemble_validator=validator,  # type: ignore[arg-type]
+    )
+    _patch_runnable(monkeypatch, fake_llm)
 
     result = pipeline.answer("reference text", "a question?")
 
@@ -98,15 +128,20 @@ def test_pipeline_refines_then_succeeds(monkeypatch) -> None:
 
 
 def test_pipeline_stops_at_max_iterations(monkeypatch) -> None:
-    # Always returns UNSUPPORTED -> should exhaust the iteration budget.
-    fake = FakeLLM(["initial"] + ["Claim: UNSUPPORTED", "refined"] * 10)
+    # Always ungrounded -> should exhaust the iteration budget.
+    fake_llm = FakeLLM(["initial"] + ["refined"] * 3)
+    validator = FakeEnsembleValidator([(False, "Claim: UNSUPPORTED")] * 3)
     settings = Settings(
         cloudflare_api_key="k",
         cloudflare_account_id="test-account",
         max_refinement_iterations=3,
     )
-    pipeline = QAPipeline(llm=None, settings=settings)  # type: ignore[arg-type]
-    _patch_runnable(monkeypatch, fake)
+    pipeline = QAPipeline(
+        llm=None,  # type: ignore[arg-type]
+        settings=settings,
+        ensemble_validator=validator,  # type: ignore[arg-type]
+    )
+    _patch_runnable(monkeypatch, fake_llm)
 
     result = pipeline.answer("reference", "q?")
 
