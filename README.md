@@ -173,7 +173,7 @@ For large documents — e.g. the 300-page OECD Economic Outlook shipped in
 prompt: index once, then ask questions against the index.
 
 ```bash
-# Index the document into the vector store (chunk -> embed -> persist). Once only.
+# Index the document into the vector store (chunk -> embed -> persist).
 python scripts/index_document.py --pdf data/oecd_outlook_2026.pdf
 
 # Ask a question via RAG (indexes automatically first if not already indexed)
@@ -182,6 +182,15 @@ python scripts/ask_rag.py --pdf data/oecd_outlook_2026.pdf --question "What is t
 # Batch of questions from a file, written to JSON
 python scripts/ask_rag.py --pdf data/oecd_outlook_2026.pdf --questions-file questions.txt --output results.json
 ```
+
+`index_document.py` is safe to run every time, on any PDF - there's no need to
+remember whether a given document was already indexed. A fingerprint of the
+document's content, chunk settings, and embedding model is persisted alongside
+the index (`.chroma/index_fingerprint.json`): the same document with the same
+settings is detected and skipped automatically; a *different* document (or
+changed chunk settings, or a swapped embedding model) is just as automatically
+detected and the index is rebuilt - no `--force` needed unless you want to
+force a rebuild regardless of whether anything actually changed.
 
 #### Concrete evidence the pipeline is grounded, not guessing
 
