@@ -18,7 +18,7 @@ from tenacity import (
 )
 
 from llm_qa.config.settings import Settings
-from llm_qa.core.exceptions import LLMProviderError
+from llm_qa.core.exceptions import LLMProviderError, QuotaExhaustedError
 from llm_qa.core.logging_config import get_logger
 
 logger = get_logger(__name__)
@@ -30,6 +30,20 @@ _CLOUDFLARE_API_BASE = "https://api.cloudflare.com/client/v4/accounts"
 # and would fail identically on every attempt.
 _RETRYABLE_STATUS_CODES = frozenset({429, 500, 502, 503, 504})
 
+# Cloudflare's own error code for "daily free-tier neuron allocation used
+# up". This is a 429, but NOT a transient rate limit - it will fail
+# identically on every attempt until the provider's daily reset, so
+# retrying it (or pacing requests further apart) cannot help at all.
+_QUOTA_EXHAUSTED_ERROR_CODE = 4006
+
+
+def _is_quota_exhausted(response: httpx.Response) -> bool:
+    try:
+        errors = response.json().get("errors", [])
+    except ValueError:
+        return False
+    return any(e.get("code") == _QUOTA_EXHAUSTED_ERROR_CODE for e in errors)
+
 
 def _is_retryable(exc: BaseException) -> bool:
     """Retry transient failures only, not permanent client errors.
@@ -40,10 +54,15 @@ def _is_retryable(exc: BaseException) -> bool:
     that's a response we did receive, just not a usable one, and it's
     plausibly a transient provider glitch rather than a config error we can
     diagnose from the response alone.
+
+    The one deliberate exception: a 429 caused by exhausting the daily free
+    quota looks like a rate limit but isn't one - see _is_quota_exhausted.
     """
     if isinstance(exc, httpx.TransportError):
         return True
     if isinstance(exc, httpx.HTTPStatusError):
+        if exc.response.status_code == 429 and _is_quota_exhausted(exc.response):
+            return False
         return exc.response.status_code in _RETRYABLE_STATUS_CODES
     return isinstance(exc, LLMProviderError)
 
@@ -131,6 +150,19 @@ class CloudflareWorkersAILLM(LLM):
             # success: false) - don't wrap an LLMProviderError in another one.
             logger.error("Cloudflare Workers AI request failed: %s", exc)
             raise
+        except httpx.HTTPStatusError as exc:
+            if exc.response.status_code == 429 and _is_quota_exhausted(exc.response):
+                message = (
+                    "Cloudflare Workers AI daily free-tier neuron allocation "
+                    "(10,000/day) is exhausted. This is a hard quota, not a "
+                    "rate limit - retrying or pacing requests cannot help. "
+                    "Wait for the daily reset, or upgrade to the Workers AI "
+                    "paid plan."
+                )
+                logger.error(message)
+                raise QuotaExhaustedError(message) from exc
+            logger.error("Cloudflare Workers AI request failed: %s", exc)
+            raise LLMProviderError(f"LLM provider request failed: {exc}") from exc
         except Exception as exc:  # noqa: BLE001 - typed re-raise
             logger.error("Cloudflare Workers AI request failed: %s", exc)
             raise LLMProviderError(f"LLM provider request failed: {exc}") from exc
