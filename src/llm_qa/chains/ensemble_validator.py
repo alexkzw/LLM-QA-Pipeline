@@ -5,10 +5,9 @@ A validator built from the same weights as the generator is prone to miss
 exactly the mistakes that model tends to make - it's grading its own
 homework. Using architecturally different models (different training data,
 different developers) reduces that correlated blind spot. All three still
-run on Cloudflare Workers AI (no new accounts/providers needed), because
-diversity here comes from different model weights, not different hosting
-companies - a different provider serving the same open-weight model would
-add zero independence.
+run on Cloudflare Workers AI, because diversity here comes from different 
+model weights, not different hosting companies - a different provider 
+serving the same open-weight model would add zero independence.
 """
 from __future__ import annotations
 
@@ -25,10 +24,7 @@ from llm_qa.core.logging_config import get_logger
 logger = get_logger(__name__)
 
 # Deliberately different model families than the generator
-# (@cf/meta/llama-3.1-8b-instruct) and from each other. Verified live against
-# the project's Cloudflare account - not every model on Cloudflare's catalog
-# is reachable on every account/token (several return 403/410/empty-response
-# on this one), so these are the three confirmed working at time of writing.
+# (@cf/meta/llama-3.1-8b-instruct) and from each other. 
 DEFAULT_VALIDATOR_MODELS: tuple[str, ...] = (
     "@cf/mistralai/mistral-small-3.1-24b-instruct",
     "@cf/qwen/qwen2.5-coder-32b-instruct",
@@ -52,7 +48,14 @@ class EnsembleValidator:
         self,
         settings: Settings,
         model_names: tuple[str, ...] = DEFAULT_VALIDATOR_MODELS,
+        require_unanimous: bool = True,
     ) -> None:
+        # Asymmetric on purpose: the cost of one more (cheap) refinement pass
+        # is far lower than the cost of shipping a claim a validator
+        # correctly flagged as unsupported - a domain with real-world
+        # consequences (see README) should fail safe, not average out
+        # dissent. require_unanimous=False restores plain majority vote.
+        self._require_unanimous = require_unanimous
         self._model_names = model_names
         self._llms: list[CloudflareWorkersAILLM] = []
         for name in model_names:
@@ -84,11 +87,15 @@ class EnsembleValidator:
             )
 
     def validate(self, reference: str, response: str) -> tuple[bool, list[ValidatorVote]]:
-        """Return (majority_grounded, individual votes), for auditability.
+        """Return (accepted_grounded, individual votes), for auditability.
 
         If more than half the panel fails to respond, there's no real
         quorum - fail safe (treat as not grounded) rather than decide on
         whatever minority did respond.
+
+        Accepting "grounded" requires unanimous agreement among responding
+        validators by default (see require_unanimous in __init__) - a single
+        correct dissent is reason enough to refine again, not to be outvoted.
         """
         with ThreadPoolExecutor(max_workers=len(self._llms)) as pool:
             votes = list(
@@ -109,5 +116,8 @@ class EnsembleValidator:
             return False, votes
 
         grounded_count = sum(1 for v in successful if v.grounded)
-        majority_grounded = grounded_count > len(successful) / 2
-        return majority_grounded, votes
+        if self._require_unanimous:
+            accepted = grounded_count == len(successful)
+        else:
+            accepted = grounded_count > len(successful) / 2
+        return accepted, votes
