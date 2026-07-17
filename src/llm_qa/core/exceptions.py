@@ -26,5 +26,12 @@ class LLMProviderError(LLMQAError):
     """Raised when the upstream LLM provider fails (network, auth, rate limit)."""
 
 
+class QuotaExhaustedError(LLMProviderError):
+    """Raised when a hard usage quota (e.g. a daily free-tier allocation) is
+    exhausted. Unlike an ordinary rate limit, this will not recover within
+    the same run - retrying or waiting seconds/minutes cannot help, only
+    waiting for the provider's reset window (or upgrading the plan) can."""
+
+
 class RetrievalError(LLMQAError):
     """Raised when retrieval is attempted before the index has been built."""
