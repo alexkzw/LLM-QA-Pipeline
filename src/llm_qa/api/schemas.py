@@ -24,6 +24,16 @@ class RefinementStepResponse(BaseModel):
     is_grounded: bool
 
 
+class TokenUsageResponse(BaseModel):
+    """Total token usage across every LLM call this request made (generation
+    + all ensemble validator calls + any refinement passes). Fields are None
+    where the provider didn't report usage for a given model."""
+
+    prompt_tokens: int | None
+    completion_tokens: int | None
+    total_tokens: int | None
+
+
 class AskResponse(BaseModel):
     """Response body for the /ask endpoint."""
 
@@ -31,8 +41,34 @@ class AskResponse(BaseModel):
     final_answer: str
     fully_grounded: bool
     iterations_used: int
+    token_usage: TokenUsageResponse
+    estimated_cost_usd: float | None = Field(
+        default=None,
+        description=(
+            "Approximate USD cost across all calls this request made "
+            "(generation + ensemble validation + refinement). See "
+            "core/cost.py - this is a blended estimate, not a Cloudflare "
+            "invoice figure."
+        ),
+    )
 
 
 class HealthResponse(BaseModel):
     status: str = "ok"
     version: str
+
+
+class AskJobCreated(BaseModel):
+    """Response body for POST /ask/async - poll GET /ask/jobs/{job_id} next."""
+
+    job_id: str
+    status: str
+
+
+class AskJobStatusResponse(BaseModel):
+    """Response body for GET /ask/jobs/{job_id}."""
+
+    job_id: str
+    status: str
+    result: AskResponse | None = None
+    error: str | None = None
