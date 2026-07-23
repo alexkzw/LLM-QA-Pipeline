@@ -1,6 +1,7 @@
 """Structured logging configuration.
 
-A logger that supports levels, timestamps, and optional JSON output for production log aggregation.
+A logger that supports levels, timestamps, and optional JSON output for
+production log aggregation.
 """
 
 from __future__ import annotations
