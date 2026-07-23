@@ -18,7 +18,7 @@ from llm_qa.chains.grounding import is_fully_grounded
 from llm_qa.chains.prompts import VALIDATION_PROMPT
 from llm_qa.config.settings import Settings
 from llm_qa.core.exceptions import LLMProviderError
-from llm_qa.core.llm_provider import CloudflareWorkersAILLM
+from llm_qa.core.llm_provider import CloudflareWorkersAILLM, TokenUsage
 from llm_qa.core.logging_config import get_logger
 
 logger = get_logger(__name__)
@@ -39,6 +39,7 @@ class ValidatorVote:
     model_name: str
     grounded: bool | None  # None means this validator's call failed
     text: str
+    usage: TokenUsage | None = None  # None if the call failed or usage was unreported
 
 
 class EnsembleValidator:
@@ -77,6 +78,7 @@ class EnsembleValidator:
                 model_name=llm.model_name,
                 grounded=is_fully_grounded(text),
                 text=text,
+                usage=llm.get_last_usage(),
             )
         except LLMProviderError as exc:
             logger.warning("Validator %s failed: %s", llm.model_name, exc)
@@ -86,7 +88,9 @@ class EnsembleValidator:
                 text=f"[validator call failed: {exc}]",
             )
 
-    def validate(self, reference: str, response: str) -> tuple[bool, list[ValidatorVote]]:
+    def validate(
+        self, reference: str, response: str
+    ) -> tuple[bool, list[ValidatorVote]]:
         """Return (accepted_grounded, individual votes), for auditability.
 
         If more than half the panel fails to respond, there's no real
