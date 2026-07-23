@@ -301,6 +301,12 @@ export LLMQA_CLOUDFLARE_ACCOUNT_ID=your_account_id_here
 docker compose up --build
 ```
 
+### 10. Deploy to production
+
+See [`DEPLOY.md`](DEPLOY.md) for a live deployment on Fly.io - the persistent
+volume, secrets, and the ingestion path for getting a document onto the
+deployed index (not the same problem as indexing locally).
+
 ## Development
 
 ```bash
