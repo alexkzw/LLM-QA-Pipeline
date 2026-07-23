@@ -5,6 +5,7 @@
 """
 from __future__ import annotations
 
+from dataclasses import dataclass
 from typing import Any
 
 import httpx
@@ -35,6 +36,33 @@ _RETRYABLE_STATUS_CODES = frozenset({429, 500, 502, 503, 504})
 # identically on every attempt until the provider's daily reset, so
 # retrying it (or pacing requests further apart) cannot help at all.
 _QUOTA_EXHAUSTED_ERROR_CODE = 4006
+
+
+@dataclass(frozen=True)
+class TokenUsage:
+    """Token counts for one completed LLM call, for cost/observability.
+
+    Cloudflare Workers AI includes a ``usage`` block on most (not all)
+    text-generation models' responses - when it's absent we still need to
+    account for the call happening, so every field is optional rather than
+    dropping the call from aggregate totals silently.
+    """
+
+    prompt_tokens: int | None
+    completion_tokens: int | None
+    total_tokens: int | None
+
+    def __add__(self, other: TokenUsage) -> TokenUsage:
+        def _sum(a: int | None, b: int | None) -> int | None:
+            if a is None and b is None:
+                return None
+            return (a or 0) + (b or 0)
+
+        return TokenUsage(
+            prompt_tokens=_sum(self.prompt_tokens, other.prompt_tokens),
+            completion_tokens=_sum(self.completion_tokens, other.completion_tokens),
+            total_tokens=_sum(self.total_tokens, other.total_tokens),
+        )
 
 
 def _is_quota_exhausted(response: httpx.Response) -> bool:
@@ -77,6 +105,10 @@ class CloudflareWorkersAILLM(LLM):
 
     # The HTTP client is runtime state, not a serialisable field.
     _client: httpx.Client = PrivateAttr()
+    # Usage from the most recent _call - LangChain's LLM._call signature
+    # returns only the completion text, so token counts ride along here
+    # instead, read back via get_last_usage() right after invoke().
+    _last_usage: TokenUsage | None = PrivateAttr(default=None)
 
     def __init__(self, settings: Settings, **kwargs: Any) -> None:
         super().__init__(  # type: ignore[call-arg]  # LangChain pydantic base
@@ -104,6 +136,15 @@ class CloudflareWorkersAILLM(LLM):
         """Release the underlying HTTP connection pool."""
         self._client.close()
 
+    def get_last_usage(self) -> TokenUsage | None:
+        """Token usage from the most recent completed call, if reported.
+
+        None either means no call has been made yet, or Cloudflare didn't
+        include a usage block for this model - callers should treat that as
+        "unknown", not "zero".
+        """
+        return self._last_usage
+
     @property
     def _llm_type(self) -> str:
         return "cloudflare-workers-ai"
@@ -115,7 +156,7 @@ class CloudflareWorkersAILLM(LLM):
         run_manager: Any | None = None,
         **kwargs: Any,
     ) -> str:
-        """Send a single prompt to Cloudflare Workers AI and return the completion text."""
+        """Send a single prompt to Cloudflare Workers AI and return the completion."""
 
         @retry(
             retry=retry_if_exception(_is_retryable),
@@ -138,9 +179,16 @@ class CloudflareWorkersAILLM(LLM):
                 raise LLMProviderError(
                     f"Cloudflare Workers AI error: {payload.get('errors')}"
                 )
-            content = payload.get("result", {}).get("response")
+            result = payload.get("result", {})
+            content = result.get("response")
             if not content:
                 raise LLMProviderError("LLM returned an empty response.")
+            usage = result.get("usage") or {}
+            self._last_usage = TokenUsage(
+                prompt_tokens=usage.get("prompt_tokens"),
+                completion_tokens=usage.get("completion_tokens"),
+                total_tokens=usage.get("total_tokens"),
+            )
             return content
 
         try:
