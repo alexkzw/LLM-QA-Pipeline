@@ -38,6 +38,27 @@ def _split_sentences(text: str) -> list[str]:
     return [p.strip() for p in parts if p.strip()]
 
 
+def _hard_split(text: str, chunk_size: int, chunk_overlap: int) -> list[str]:
+    """Split text with no usable sentence boundary into fixed-size pieces.
+
+    Fallback for a single "sentence" longer than chunk_size on its own (e.g.
+    a dense table with no sentence-ending punctuation for pages at a time -
+    a real risk for this project's reference document, per the README).
+    Without this, the main loop below has no boundary to stop at and the
+    oversized unit becomes one arbitrarily large chunk instead of respecting
+    chunk_size.
+    """
+    step = chunk_size - chunk_overlap
+    pieces = []
+    start = 0
+    while start < len(text):
+        pieces.append(text[start : start + chunk_size])
+        if start + chunk_size >= len(text):
+            break
+        start += step
+    return pieces
+
+
 def chunk_text(
     text: str,
     chunk_size: int = 1000,
@@ -78,6 +99,18 @@ def chunk_text(
             )
 
     for sentence in sentences:
+        if len(sentence) > chunk_size:
+            # No sentence boundary to fit within chunk_size - flush whatever
+            # was pending, then hard-split this oversized unit on its own.
+            _flush(buffer, buffer_start)
+            buffer = ""
+            piece_start = cursor
+            for piece in _hard_split(sentence, chunk_size, chunk_overlap):
+                _flush(piece, piece_start)
+                piece_start += len(piece) - chunk_overlap
+            cursor += len(sentence) + 1
+            continue
+
         if buffer and len(buffer) + len(sentence) + 1 > chunk_size:
             _flush(buffer, buffer_start)
             # Start the next buffer with the overlap tail of the previous one.
