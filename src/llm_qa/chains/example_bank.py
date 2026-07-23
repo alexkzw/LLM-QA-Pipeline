@@ -27,66 +27,90 @@ class FewShotExample:
 # multi-passage citation, and the exact decline phrasing for unanswerable
 # questions (the eval harness scores abstention_accuracy on the latter, so
 # showing the exact wording rather than only describing it should help).
+#
+# Every context passage and figure below was pulled from a real, live query
+# against the actual indexed OECD PDF (verified, not invented) - an earlier
+# version of this bank used illustrative-but-invented figures, which risks
+# the model treating fictional example content as available fact. Building
+# from real retrieved passages removes that risk entirely. None of these
+# questions overlap with data/evaluation_set.json's questions/topics, to
+# avoid the prompt design leaking information about the held-out eval set.
 RAG_FEW_SHOT_EXAMPLES: list[FewShotExample] = [
     FewShotExample(
-        question="What is the projected global GDP growth rate for 2026?",
-        context=(
-            "[1] (relevance 0.91)\n"
-            "Global growth is projected to slow from 3.4% in 2025 to 2.8% in "
-            "2026, before recovering to 3.1% in 2027 under the time-limited "
-            "disruption scenario.\n\n"
-            "[2] (relevance 0.77)\n"
-            "The prolonged disruption scenario projects weaker growth of "
-            "2.3% in 2026 and 2.6% in 2027."
-        ),
-        answer=(
-            "Under the time-limited disruption scenario, global growth is "
-            "projected to slow to 2.8% in 2026 [1]. Under the more severe "
-            "prolonged disruption scenario, growth would be weaker at 2.3% "
-            "in 2026 [2]."
-        ),
-    ),
-    FewShotExample(
-        question="How does inflation affect interest rate decisions in 2026?",
-        context=(
-            "[1] (relevance 0.88)\n"
-            "Headline inflation is expected to rise to 4.0% in 2026 due to "
-            "renewed supply-chain disruption.\n\n"
-            "[2] (relevance 0.81)\n"
-            "Central banks are expected to delay planned rate cuts if "
-            "inflation remains above target, prioritising price stability "
-            "over growth support."
-        ),
-        answer=(
-            "Inflation is projected to rise to 4.0% in 2026 [1], and central "
-            "banks are expected to delay planned interest rate cuts as a "
-            "result, prioritising price stability over supporting growth [2]."
-        ),
-    ),
-    FewShotExample(
         question=(
-            "What event does the editorial identify as the dominant force "
-            "shaping the global outlook?"
+            "What is Canada's economic outlook for 2026, in terms of growth "
+            "and inflation?"
         ),
         context=(
-            "[1] (relevance 0.93)\n"
-            "The conflict in the Middle East has become the dominant force "
-            "shaping the global economic outlook, according to the editorial."
+            "[1] (relevance 0.74)\n"
+            "Real GDP growth in the United States and Canada will benefit "
+            "from stronger energy-sector exports, but this will be offset by "
+            "the negative impact of higher energy prices on inflation and "
+            "household purchasing power. In the United States, growth is "
+            "projected to slow from 2.1% in 2025 to 2.0% in 2026 and 1.8% in "
+            "2027, while Canada's growth is expected to decline from 1.7% in "
+            "2025 to 1.2% in 2026 before rebounding to 1.7% in 2027 as "
+            "domestic demand recovers.\n\n"
+            "[2] (relevance 0.68)\n"
+            "Headline inflation rose to 2.8% in April 2026, from 2.4% in "
+            "March, driven by higher energy prices linked to the conflict in "
+            "the Middle East. Core inflation continued to moderate, easing "
+            "to 1.5% in April."
         ),
         answer=(
-            "The conflict in the Middle East has become the dominant force "
-            "shaping the global economic outlook [1]."
+            "Canada's growth is expected to decline from 1.7% in 2025 to "
+            "1.2% in 2026, before rebounding to 1.7% in 2027 as domestic "
+            "demand recovers [1]. Headline inflation rose to 2.8% in April "
+            "2026, up from 2.4% in March, driven by higher energy prices "
+            "linked to the Middle East conflict, while core inflation eased "
+            "to 1.5% in April [2]."
+        ),
+    ),
+    FewShotExample(
+        question="How are export volumes in China expected to grow in 2026?",
+        context=(
+            "[1] (relevance 0.71)\n"
+            "In 2026, export volumes in China and the dynamic Asian "
+            "economies are expected to grow by over 6.5%, amongst the "
+            "fastest rates globally. Aggregate trade growth is projected to "
+            "slow in the second and third quarters of this year, reflecting "
+            "a sharp decline in trade with the Gulf economies, and "
+            "increasing energy and transport costs."
+        ),
+        answer=(
+            "Export volumes in China and the dynamic Asian economies are "
+            "expected to grow by over 6.5% in 2026, among the fastest rates "
+            "globally [1]."
+        ),
+    ),
+    FewShotExample(
+        question="What has the Bank of Japan done regarding its policy interest rate?",
+        context=(
+            "[1] (relevance 0.68)\n"
+            "The Bank of Japan has taken steps toward monetary policy "
+            "normalisation by starting to reduce the size of its balance "
+            "sheet and raising the policy interest rate, which reached "
+            "around 0.75% in December 2025."
+        ),
+        answer=(
+            "The Bank of Japan has taken steps toward monetary policy "
+            "normalisation, including raising its policy interest rate to "
+            "around 0.75% in December 2025 [1]."
         ),
     ),
     FewShotExample(
         question="What is the population of Japan mentioned in the reference?",
         context=(
-            "[1] (relevance 0.42)\n"
-            "Japan's monetary policy remains accommodative relative to other "
-            "advanced economies.\n\n"
-            "[2] (relevance 0.38)\n"
-            "Wage growth in Japan is expected to support a modest recovery "
-            "in private consumption."
+            "[1] (relevance 0.43)\n"
+            "Japan: Demand, output and prices. GDP at market prices 584.9 "
+            "0.7 -0.2 1.1 0.6 0.8. Private consumption 319.0 0.1 -0.6 1.3 "
+            "0.7 0.6. Government consumption 121.1 -0.2 1.6 1.0 1.7 1.9.\n\n"
+            "[2] (relevance 0.36)\n"
+            "Monetary policy is projected to tighten, while fiscal policy "
+            "will support growth in 2026. The Bank of Japan has taken steps "
+            "toward monetary policy normalisation by starting to reduce the "
+            "size of its balance sheet and raising the policy interest rate, "
+            "which reached around 0.75% in December 2025."
         ),
         answer=(
             "The reference does not provide enough information to answer "
@@ -96,12 +120,18 @@ RAG_FEW_SHOT_EXAMPLES: list[FewShotExample] = [
     FewShotExample(
         question="What was the stock market's reaction on the day of publication?",
         context=(
-            "[1] (relevance 0.35)\n"
-            "The scenario-based approach captures a range of possible "
-            "outcomes rather than a single point forecast.\n\n"
-            "[2] (relevance 0.31)\n"
-            "Trade policy uncertainty remains a key downside risk across "
-            "all scenarios considered."
+            "[1] (relevance 0.39)\n"
+            "Congressional Research Service (2026), \"Private credit funds "
+            "redemption restrictions: Market context and policy issues\", "
+            "Insight, IN12674, Washington, April. Conigrave, B. and Y-H. "
+            "Shin (2026), \"Fiscal and macroeconomic impacts of defence "
+            "spending\", OECD Economics Department Working Papers, No. 1861.\n\n"
+            "[2] (relevance 0.38)\n"
+            "S&P (2026a) \"J.P. Morgan global composite PMI: Global economic "
+            "growth eases to 11-month low\", News release, S&P Global, 7 "
+            "April. S&P (2026b) \"Global default rate forecast: Defaults to "
+            "edge up...\", Default, Transition, and Recovery, S&P Global, "
+            "26 May."
         ),
         answer=(
             "The reference does not provide enough information to answer "
@@ -136,7 +166,7 @@ class RagExampleSelector:
         )
 
     def select(self, question: str, k: int = 2) -> list[FewShotExample]:
-        """Return the ``k`` examples whose questions are most similar to ``question``."""
+        """Return the ``k`` examples whose questions are closest to ``question``."""
         if not self._examples:
             return []
         query_vec = self._embedder.embed_one(question)
