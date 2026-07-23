@@ -34,4 +34,11 @@ class QuotaExhaustedError(LLMProviderError):
 
 
 class RetrievalError(LLMQAError):
-    """Raised when retrieval is attempted before the index has been built."""
+    """Raised when the retrieval subsystem fails: querying before the index
+    is built, or the underlying vector store rejecting/failing an
+    index/search operation."""
+
+
+class EmbeddingError(LLMQAError):
+    """Raised when the embedding model fails to load (bad model name, no
+    network on first download, corrupted cache, etc.)."""
