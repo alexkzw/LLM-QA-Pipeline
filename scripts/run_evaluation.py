@@ -21,10 +21,11 @@ import argparse
 import json
 import re
 import sys
+import time
 from pathlib import Path
 
 from llm_qa.config.settings import get_settings
-from llm_qa.core.exceptions import LLMQAError
+from llm_qa.core.exceptions import LLMQAError, QuotaExhaustedError
 from llm_qa.core.logging_config import configure_logging, get_logger
 from llm_qa.factory import build_rag_pipeline
 
@@ -78,6 +79,17 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         default=0.5,
         help="Min key-token recall for an answerable item to count as a hit.",
     )
+    parser.add_argument(
+        "--pause-seconds",
+        type=float,
+        default=2.0,
+        help=(
+            "Pause between questions, to spread out request bursts and "
+            "reduce the chance of tripping the provider's rate limit "
+            "(each question can fire several concurrent validator calls "
+            "across multiple refinement iterations)."
+        ),
+    )
     return parser.parse_args(argv)
 
 
@@ -94,9 +106,49 @@ def main(argv: list[str] | None = None) -> int:
         logger.error("Failed to build pipeline: %s", exc)
         return 1
 
+    answerable_items = eval_data.get("answerable", [])
+    adversarial_items = eval_data.get("adversarial", [])
+    total_items = len(answerable_items) + len(adversarial_items)
+    done = 0
+    quota_exhausted = False
+
     answerable_results = []
-    for item in eval_data.get("answerable", []):
-        result = pipeline.answer_with_retrieval(item["question"])
+    for item in answerable_items:
+        if quota_exhausted:
+            break
+        done += 1
+        try:
+            result = pipeline.answer_with_retrieval(item["question"])
+        except QuotaExhaustedError as exc:
+            # A hard daily quota, not a transient failure - every remaining
+            # question would fail identically, so stop immediately instead
+            # of burning through the rest of the eval set pointlessly.
+            logger.error(
+                "Stopping early: %s (%d/%d questions completed before this)",
+                exc, done - 1, total_items,
+            )
+            quota_exhausted = True
+            break
+        except LLMQAError as exc:
+            # Any other failure (e.g. a genuine transient rate limit that
+            # outlasted the retry budget) shouldn't discard every other
+            # already-computed result - record it and keep going.
+            logger.error("Question %s failed: %s", item["id"], exc)
+            answerable_results.append(
+                {
+                    "id": item["id"],
+                    "question": item["question"],
+                    "gold_answer": item["gold_answer"],
+                    "error": str(exc),
+                    "fully_grounded": False,
+                    "passed": False,
+                }
+            )
+            continue
+        finally:
+            if done < total_items and not quota_exhausted:
+                time.sleep(args.pause_seconds)
+
         recall = _recall_score(result.final_answer, item["gold_answer"])
         declined = _looks_like_decline(result.final_answer)
         answerable_results.append(
@@ -113,8 +165,34 @@ def main(argv: list[str] | None = None) -> int:
         )
 
     adversarial_results = []
-    for item in eval_data.get("adversarial", []):
-        result = pipeline.answer_with_retrieval(item["question"])
+    for item in adversarial_items:
+        if quota_exhausted:
+            break
+        done += 1
+        try:
+            result = pipeline.answer_with_retrieval(item["question"])
+        except QuotaExhaustedError as exc:
+            logger.error(
+                "Stopping early: %s (%d/%d questions completed before this)",
+                exc, done - 1, total_items,
+            )
+            quota_exhausted = True
+            break
+        except LLMQAError as exc:
+            logger.error("Question %s failed: %s", item["id"], exc)
+            adversarial_results.append(
+                {
+                    "id": item["id"],
+                    "question": item["question"],
+                    "error": str(exc),
+                    "passed": False,
+                }
+            )
+            continue
+        finally:
+            if done < total_items and not quota_exhausted:
+                time.sleep(args.pause_seconds)
+
         declined = _looks_like_decline(result.final_answer)
         adversarial_results.append(
             {
@@ -127,13 +205,19 @@ def main(argv: list[str] | None = None) -> int:
         )
 
     # --- Aggregate metrics --------------------------------------------
+    # .get(..., False) rather than [...]: a failed question's result dict
+    # (see the except LLMQAError branches above) may not have every key a
+    # successful one does - the summary should degrade, not crash, if so.
     n_ans = len(answerable_results)
-    n_ans_pass = sum(r["passed"] for r in answerable_results)
-    n_grounded = sum(r["fully_grounded"] for r in answerable_results)
+    n_ans_pass = sum(r.get("passed", False) for r in answerable_results)
+    n_grounded = sum(r.get("fully_grounded", False) for r in answerable_results)
     n_adv = len(adversarial_results)
-    n_adv_pass = sum(r["passed"] for r in adversarial_results)
+    n_adv_pass = sum(r.get("passed", False) for r in adversarial_results)
 
     summary = {
+        "complete": not quota_exhausted and done == total_items,
+        "questions_completed": done - (1 if quota_exhausted else 0),
+        "questions_total": total_items,
         "answerable_total": n_ans,
         "answerable_passed": n_ans_pass,
         "answerable_accuracy": round(n_ans_pass / n_ans, 3) if n_ans else None,
@@ -155,6 +239,12 @@ def main(argv: list[str] | None = None) -> int:
         logger.info("Wrote results to %s", args.output)
 
     print("\n=== EVALUATION SUMMARY ===")
+    if quota_exhausted:
+        print(
+            "WARNING: run stopped early - daily quota exhausted. Metrics "
+            "below only cover the questions completed before that point, "
+            "not the full eval set."
+        )
     print(json.dumps(summary, indent=2))
     return 0
 
