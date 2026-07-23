@@ -46,7 +46,8 @@ class FakeEnsembleValidator:
         grounded, text = (
             self._results.pop(0) if self._results else (True, "SUPPORTED.")
         )
-        return grounded, [ValidatorVote(model_name="fake-model", grounded=grounded, text=text)]
+        vote = ValidatorVote(model_name="fake-model", grounded=grounded, text=text)
+        return grounded, [vote]
 
     def close(self) -> None:
         pass

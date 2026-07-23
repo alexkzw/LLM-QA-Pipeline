@@ -24,7 +24,8 @@ class FakeEnsembleValidator:
         grounded, text = (
             self._results.pop(0) if self._results else (True, "SUPPORTED.")
         )
-        return grounded, [ValidatorVote(model_name="fake-model", grounded=grounded, text=text)]
+        vote = ValidatorVote(model_name="fake-model", grounded=grounded, text=text)
+        return grounded, [vote]
 
     def close(self) -> None:
         pass
@@ -72,6 +73,30 @@ def test_chunking_rejects_bad_overlap() -> None:
 
     with pytest.raises(ValueError):
         chunk_text("some text", chunk_size=100, chunk_overlap=100)
+
+
+def test_chunking_hard_splits_oversized_sentence() -> None:
+    # A dense table has no sentence-ending punctuation for pages at a time -
+    # without a hard-split fallback, this becomes one arbitrarily large chunk.
+    oversized_blob = " ".join(f"col{i}" for i in range(2000))
+    assert len(oversized_blob) > 1000
+
+    chunks = chunk_text(oversized_blob, chunk_size=1000, chunk_overlap=150)
+    assert all(len(c.text) <= 1000 for c in chunks)
+    assert len(chunks) > 1
+
+
+def test_chunking_hard_split_coexists_with_normal_sentences() -> None:
+    oversized_blob = " ".join(f"col{i}" for i in range(2000))
+    text = (
+        "Normal sentence one. Normal sentence two. "
+        + oversized_blob
+        + " Normal sentence three. Normal sentence four."
+    )
+    chunks = chunk_text(text, chunk_size=1000, chunk_overlap=150)
+    assert all(len(c.text) <= 1000 for c in chunks)
+    assert chunks[0].text.startswith("Normal sentence one.")
+    assert chunks[-1].text.endswith("Normal sentence four.")
 
 
 # --- Retrieval pipeline -------------------------------------------------
