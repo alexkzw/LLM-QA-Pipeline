@@ -10,6 +10,7 @@ from __future__ import annotations
 
 from functools import lru_cache
 
+from llm_qa.core.exceptions import EmbeddingError
 from llm_qa.core.logging_config import get_logger
 
 logger = get_logger(__name__)
@@ -29,7 +30,16 @@ def _load_model(model_name: str):
     from sentence_transformers import SentenceTransformer
 
     logger.info("Loading embedding model: %s", model_name)
-    return SentenceTransformer(model_name)
+    try:
+        return SentenceTransformer(model_name)
+    except Exception as exc:  # noqa: BLE001 - typed re-raise at the boundary
+        # A bad model name, no network on first download, or a corrupted
+        # cache all surface as different raw exceptions from HF/torch - none
+        # of them are LLMQAError, so callers' `except LLMQAError` handling
+        # (every CLI script) would otherwise miss this entirely.
+        raise EmbeddingError(
+            f"Failed to load embedding model '{model_name}': {exc}"
+        ) from exc
 
 
 class EmbeddingModel:
