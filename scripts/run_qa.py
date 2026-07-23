@@ -5,8 +5,8 @@ One job: take a PDF and one or more questions, run the grounded + refined
 pipeline, and print structured results as JSON.
 
 Examples:
-    python scripts/run_qa.py --pdf data/oecd_economic_outlook_2026.pdf --question "What is X?"
-    python scripts/run_qa.py --pdf data/oecd_economic_outlook_2026.pdf --questions-file qs.txt
+    python scripts/run_qa.py --pdf data/short_ref.pdf --question "What is X?"
+    python scripts/run_qa.py --pdf data/short_ref.pdf --questions-file qs.txt
 """
 from __future__ import annotations
 
