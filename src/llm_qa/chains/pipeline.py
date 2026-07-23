@@ -14,19 +14,51 @@ from langchain_core.prompts import BasePromptTemplate
 
 from llm_qa.chains.ensemble_validator import EnsembleValidator, ValidatorVote
 from llm_qa.chains.example_bank import RagExampleSelector
-from llm_qa.chains.grounding import is_fully_grounded
 from llm_qa.chains.prompts import (
     REFINEMENT_PROMPT,
     build_initial_prompt,
     build_rag_prompt,
 )
 from llm_qa.config.settings import Settings
+from llm_qa.core.cost import estimate_cost_usd
 from llm_qa.core.exceptions import ConfigurationError
-from llm_qa.core.llm_provider import CloudflareWorkersAILLM
+from llm_qa.core.llm_provider import CloudflareWorkersAILLM, TokenUsage
 from llm_qa.core.logging_config import get_logger
 from llm_qa.retrieval.retriever import Retriever
 
 logger = get_logger(__name__)
+
+_EMPTY_USAGE = TokenUsage(prompt_tokens=None, completion_tokens=None, total_tokens=None)
+
+
+class _UsageTracker:
+    """Accumulates token usage and $ cost across every LLM call in one run.
+
+    A pipeline run fans out into many calls - one generation, plus 3
+    validator calls and (on refinement) another generation per iteration -
+    each potentially a different model with a different cost/1K rate (see
+    core/cost.py). Cost is summed per-call rather than from the aggregate
+    token total, since applying one blended rate to tokens from several
+    differently-priced models would misstate the total.
+    """
+
+    def __init__(self) -> None:
+        self.usage = _EMPTY_USAGE
+        self._cost_usd = 0.0
+        self._any_known_cost = False
+
+    def record(self, model_name: str, usage: TokenUsage | None) -> None:
+        if usage is None:
+            return
+        self.usage = self.usage + usage
+        call_cost = estimate_cost_usd(model_name, usage)
+        if call_cost is not None:
+            self._cost_usd += call_cost
+            self._any_known_cost = True
+
+    @property
+    def estimated_cost_usd(self) -> float | None:
+        return round(self._cost_usd, 6) if self._any_known_cost else None
 
 
 @dataclass
@@ -52,6 +84,8 @@ class QAResult:
     history: list[RefinementStep] = field(default_factory=list)
     retrieved_chunk_ids: list[int] = field(default_factory=list)
     retrieved_context: str | None = None
+    token_usage: TokenUsage = field(default_factory=lambda: _EMPTY_USAGE)
+    estimated_cost_usd: float | None = None
 
 
 class QAPipeline:
@@ -74,6 +108,7 @@ class QAPipeline:
             if ensemble_validator is not None
             else EnsembleValidator(settings)
         )
+        self._rag_example_selector: RagExampleSelector | None
         if rag_example_selector is not None:
             self._rag_example_selector = rag_example_selector
         elif retriever is not None:
@@ -93,6 +128,15 @@ class QAPipeline:
         runnable = template | self._llm
         return runnable.invoke(inputs)
 
+    def _record_llm_usage(self, tracker: _UsageTracker) -> None:
+        """Record the most recent _run_chain call's usage onto tracker.
+
+        self._llm is None only in tests that stub out _run_chain entirely
+        (see test_pipeline.py) - nothing to record in that case.
+        """
+        if self._llm is not None:
+            tracker.record(self._llm.model_name, self._llm.get_last_usage())
+
     @staticmethod
     def _summarise_votes(votes: list[ValidatorVote]) -> str:
         def _label(vote: ValidatorVote) -> str:
@@ -103,14 +147,17 @@ class QAPipeline:
         return "; ".join(f"{v.model_name}={_label(v)}" for v in votes)
 
     def _refine_against(
-        self, reference: str, initial_answer: str
+        self, reference: str, initial_answer: str, tracker: _UsageTracker
     ) -> tuple[str, list[RefinementStep], bool]:
         """Run the validate->refine loop against a reference text.
 
         Shared by both the full-document and retrieval-based entry points.
-        Validation is a majority vote across several independent models
-        (see EnsembleValidator) rather than a single model checking its own
-        output. Returns (final_answer, history, fully_grounded).
+        Validation runs across several independent models (see
+        EnsembleValidator) rather than a single model checking its own
+        output; by default accepting "grounded" requires unanimous
+        agreement, not just a majority. Returns (final_answer, history,
+        fully_grounded); token usage/cost across every call made here is
+        recorded onto the caller-owned tracker.
         """
         answer = initial_answer
         history: list[RefinementStep] = []
@@ -118,8 +165,10 @@ class QAPipeline:
 
         for i in range(1, self._settings.max_refinement_iterations + 1):
             grounded, votes = self._ensemble_validator.validate(reference, answer)
+            for vote in votes:
+                tracker.record(vote.model_name, vote.usage)
             summary = self._summarise_votes(votes)
-            logger.info("Iteration %d majority_grounded=%s (%s)", i, grounded, summary)
+            logger.info("Iteration %d accepted_grounded=%s (%s)", i, grounded, summary)
 
             if grounded:
                 history.append(
@@ -148,6 +197,7 @@ class QAPipeline:
                     "validation": combined_validation,
                 },
             )
+            self._record_llm_usage(tracker)
             history.append(
                 RefinementStep(
                     iteration=i,
@@ -172,11 +222,15 @@ class QAPipeline:
         """
         logger.info("Answering (full-document): %s", question)
 
+        tracker = _UsageTracker()
         initial_answer = self._run_chain(
             self._initial_prompt,
             {"reference": reference, "prompt": question},
         )
-        final, history, grounded = self._refine_against(reference, initial_answer)
+        self._record_llm_usage(tracker)
+        final, history, grounded = self._refine_against(
+            reference, initial_answer, tracker
+        )
 
         return QAResult(
             question=question,
@@ -185,6 +239,8 @@ class QAPipeline:
             iterations_used=len(history),
             fully_grounded=grounded,
             history=history,
+            token_usage=tracker.usage,
+            estimated_cost_usd=tracker.estimated_cost_usd,
         )
 
     def answer_with_retrieval(self, question: str) -> QAResult:
@@ -217,13 +273,17 @@ class QAPipeline:
         )
         prompt = build_rag_prompt(examples)
 
+        tracker = _UsageTracker()
         initial_answer = self._run_chain(
             prompt,
             {"context": context, "question": question},
         )
+        self._record_llm_usage(tracker)
         # Refinement is validated against the retrieved context (the only
         # evidence the answer is permitted to use).
-        final, history, grounded = self._refine_against(context, initial_answer)
+        final, history, grounded = self._refine_against(
+            context, initial_answer, tracker
+        )
 
         return QAResult(
             question=question,
@@ -234,6 +294,8 @@ class QAPipeline:
             history=history,
             retrieved_chunk_ids=[c.chunk_id for c in retrieved],
             retrieved_context=context,
+            token_usage=tracker.usage,
+            estimated_cost_usd=tracker.estimated_cost_usd,
         )
 
     def answer_without_reference(self, question: str) -> str:
