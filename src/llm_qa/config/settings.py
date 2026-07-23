@@ -31,6 +31,15 @@ class Settings(BaseSettings):
         ...,
         description="Cloudflare Account ID. Set via LLMQA_CLOUDFLARE_ACCOUNT_ID.",
     )
+    api_key: str | None = Field(
+        default=None,
+        description=(
+            "If set, callers must send it via the X-API-Key header to reach "
+            "/ask - without this, anyone who can reach the port can spend "
+            "your Cloudflare quota. Unset disables auth (local dev only); "
+            "always set it outside local dev."
+        ),
+    )
 
     # --- Model configuration ------------------------------------------
     model_name: str = Field(
@@ -62,6 +71,17 @@ class Settings(BaseSettings):
     # --- Observability -------------------------------------------------
     log_level: str = Field(default="INFO")
     log_json: bool = Field(default=False, description="Emit logs as JSON lines.")
+
+    # --- Rate limiting --------------------------------------------------
+    rate_limit_per_minute: int = Field(
+        default=20,
+        gt=0,
+        description=(
+            "Max /ask (or /ask/async) calls per minute, per API key (or per "
+            "IP if auth is disabled). Protects the Cloudflare quota from one "
+            "caller in a retry loop, on top of - not instead of - auth."
+        ),
+    )
 
 
 @lru_cache
